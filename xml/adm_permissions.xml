@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<?xml-stylesheet type="text/xsl" href='{$nrpTransform}' ?>
+
+<nrp>
+
+	<sess_id>{$nrpSessId}</sess_id>
+
+	{section name=i loop=$nrpSchErrors}
+	<error>{$nrpSchErrors[i]}</error>
+	{/section}
+
+	{section name=j loop=$nrpSchAlerts}
+	<alert>{$nrpSchAlerts[j]}</alert>
+	{/section}
+
+	{section name=m loop=$nrpPeople}
+	<person id="{$nrpPeople[m][0]}">
+		<person.name>{$nrpPeople[m][1]}</person.name>
+		<person.comments>{$nrpPeople[m][2]}</person.comments>
+		<person.department id="{$nrpPeople[m][3]}">{$nrpPeople[m][4]}</person.department>
+		<person.email>{$nrpPeople[m][5]}</person.email>
+		<person.url>{$nrpPeople[m][6]}</person.url>
+		<person.category id="{$nrpPeople[m][8]}">{$nrpPeople[m][9]}</person.category>
+	</person>
+	{/section}
+
+	{section name=l loop=$nrpCategories}
+	<category id="{$nrpCategories[l][0]}">
+		<category.name>{$nrpCategories[l][1]}</category.name>
+		<category.description>{$nrpCategories[l][2]}</category.description>
+	</category>
+	{/section}
+
+	{section name=n loop=$nrpGroups}
+	<group id="{$nrpGroups[n][0]}">
+		<group.category>{$nrpGroups[n][2]}</group.category>
+		<group.name>{$nrpGroups[n][1]}</group.name>
+		<group.acronym>{$nrpGroups[n][3]}</group.acronym>
+		<group.description>{$nrpGroups[n][4]}</group.description>
+	</group>
+	{/section}
+
+	{section name=o loop=$nrpCourses}
+	<course id="{$nrpCourses[o][0]}">
+		<course.name>{$nrpCourses[o][1]}</course.name>
+		<course.comments>{$nrpCourses[o][2]}</course.comments>
+		<course.code>{$nrpCourses[o][3]}</course.code>
+		<course.group>{$nrpCourses[o][4]}</course.group>
+		<course.semester>{$nrpCourses[o][5]}</course.semester>
+		<course.year>{$nrpCourses[o][6]}</course.year>
+		<course.lecturer id="{$nrpCourses[o][7]}">{$nrpCourses[o][8]}</course.lecturer>
+	</course>
+	{/section}
+
+	{section name=p loop=$nrpRooms}
+	<room id="{$nrpRooms[p][0]}">
+		<room.name>{$nrpRooms[p][1]}</room.name>
+		<room.comments>{$nrpRooms[p][2]}</room.comments>
+		<room.code>{$nrpRooms[p][3]}</room.code>
+		<room.capacity>{$nrpRooms[p][4]}</room.capacity>
+		<room.location>{$nrpRooms[p][5]}</room.location>
+		<room.type>{$nrpRooms[p][6]}</room.type>
+	</room>
+	{/section}
+
+	{section name=q loop=$nrpPermissions}
+	<permission id="{$nrpPermissions[q][0]}">
+		<permission.masterperson id="{$nrpPermissions[q][1]}">{$nrpPermissions[q][2]}</permission.masterperson>
+		<permission.mastergroup id="{$nrpPermissions[q][3]}">{$nrpPermissions[q][4]}</permission.mastergroup>
+		<permission.mastercategory id="{$nrpPermissions[q][5]}">{$nrpPermissions[q][6]}</permission.mastercategory>
+		<permission.slave id="{$nrpPermissions[q][7]}">{$nrpPermissions[q][8]}</permission.slave>
+		<permission.role>{$nrpPermissions[q][9]}</permission.role>
+	</permission>
+	{/section}
+</nrp>

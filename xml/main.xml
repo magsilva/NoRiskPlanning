@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<?xml-stylesheet type="text/xsl" href='{$nrpTransform}' ?>
+
+<nrp>
+	<sess_id>{$nrpSessId}</sess_id>
+
+	<master_session>{$nrpMasterSession}</master_session>
+	
+	{section name=i loop=$nrpMainErrors}
+	<error>{$nrpMainErrors[i]}</error>
+	{/section}
+
+	{section name=j loop=$nrpMainAlerts}
+	<alert>{$nrpMainAlerts[j]}</alert>
+	{/section}
+
+	{section name=l loop=$nrpMainTime}
+	<time>{$nrpMainTime[l]}</time>
+	{/section}
+
+	{section name=t loop=$nrpMainType}
+	<app_type>
+		<app_type.name>{$nrpMainType[t]}</app_type.name>
+		<app_type.color>{$nrpMainTypeColor[t]}</app_type.color>
+		<app_type.icon>{$nrpMainTypeIcon[t]}</app_type.icon>
+	</app_type>
+	{/section}
+
+	{section name=x loop=$nrpMainDaysOfWeek}
+	<day_of_week>{$nrpMainDaysOfWeek[x]}</day_of_week>
+	{/section}
+
+	{section name=v loop=$nrpMainDays}
+	<date id="{$nrpMainDays[v][0]}" week="{$nrpMainDays[v][1]}">
+		<date.day>{$nrpMainDays[v][2]}</date.day>
+		<date.month>{$nrpMainDays[v][3]}</date.month>
+		<date.year>{$nrpMainDays[v][4]}</date.year>
+		<date.dayofweek id="{$nrpMainDays[v][5]}">{$nrpMainDays[v][6]}</date.dayofweek>
+	</date>
+	{/section}
+
+	<first_day_week>{$nrpFirstDay}</first_day_week>
+
+	{section name=u loop=$nrpMainWeeks}
+	<week>{$nrpMainWeeks[u]}</week>
+	{/section}
+
+	<unauthorized_appointments>{$nrpUnauthAppointments}</unauthorized_appointments>
+
+	<schedule id="{$nrpUserId}" span="{$nrpSchSpan}">
+		<span_start>
+			<span_start.day>{$nrpSpanStartDay}</span_start.day>
+			<span_start.month name="{$nrpSpanStartMonthName}">{$nrpSpanStartMonth}</span_start.month>
+			<span_start.year>{$nrpSpanStartYear}</span_start.year>
+			<span_start.day_of_week id="{$nrpSpanEndDayOfWeekId}">{$nrpSpanStartDayOfWeek}</span_start.day_of_week>
+		</span_start>
+		<span_end>
+			<span_end.day>{$nrpSpanEndDay}</span_end.day>
+			<span_end.month name="{$nrpSpanEndMonthName}">{$nrpSpanEndMonth}</span_end.month>
+			<span_end.year>{$nrpSpanEndYear}</span_end.year>
+			<span_end.day_of_week id="{$nrpSpanEndDayOfWeekId}">{$nrpSpanEndDayOfWeek}</span_end.day_of_week>
+		</span_end>
+	{section name=k loop=$nrpMainApp}
+		<appointment id="{$nrpMainApp[k][0]}">
+			<appointment.periodicity>{$nrpMainApp[k][1]}</appointment.periodicity>
+			<appointment.description>{$nrpMainApp[k][2]}</appointment.description>
+			<appointment.length>{$nrpMainApp[k][3]}</appointment.length>
+			<appointment.date>
+				<appointment.date.day>{$nrpMainApp[k][4]}</appointment.date.day>
+				<appointment.date.month>{$nrpMainApp[k][5]}</appointment.date.month>
+				<appointment.date.year>{$nrpMainApp[k][6]}</appointment.date.year>
+			</appointment.date>
+			<appointment.beg_time id="{$nrpMainApp[k][7]}">{$nrpMainApp[k][8]}</appointment.beg_time>
+			<appointment.end_time id="{$nrpMainApp[k][9]}">{$nrpMainApp[k][10]}</appointment.end_time>
+			<appointment.type id="{$nrpMainApp[k][11]}">{$nrpMainApp[k][12]}</appointment.type>
+			<appointment.color>{$nrpMainApp[k][13]}</appointment.color>
+			<appointment.image>{$nrpMainApp[k][14]}</appointment.image>
+			<appointment.dayofweek id="{$nrpMainApp[k][15]}">{$nrpMainApp[k][16]}</appointment.dayofweek>
+			<appointment.url>{$nrpMainApp[k][17]}</appointment.url>
+			<appointment.owner>{$nrpMainApp[k][18]}</appointment.owner>
+			<appointment.group id="{$nrpMainApp[k][19]}">{$nrpMainApp[k][20]}</appointment.group>
+			<appointment.authorized>{$nrpMainApp[k][21]}</appointment.authorized>
+			<appointment.before>{$nrpMainApp[k][22]}</appointment.before>
+			<appointment.after>{$nrpMainApp[k][23]}</appointment.after>
+		</appointment>
+	{/section}
+	</schedule>
+</nrp>

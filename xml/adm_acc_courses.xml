@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<?xml-stylesheet type="text/xsl" href='{$nrpTransform}' ?>
+
+<nrp>
+
+	<sess_id>{$nrpSessId}</sess_id>
+
+	{section name=i loop=$nrpSchErrors}
+	<error>{$nrpSchErrors[i]}</error>
+	{/section}
+
+	{section name=j loop=$nrpSchAlerts}
+	<alert>{$nrpSchAlerts[j]}</alert>
+	{/section}
+
+	<schedule id="{$nrpUserId}"/>
+
+	{section name=m loop=$nrpPeople}
+	<person id="{$nrpPeople[m][0]}">
+		<person.name>{$nrpPeople[m][1]}</person.name>
+		<person.comments>{$nrpPeople[m][2]}</person.comments>
+		<person.department id="{$nrpPeople[m][3]}">{$nrpPeople[m][4]}</person.department>
+		<person.email>{$nrpPeople[m][5]}</person.email>
+		<person.url>{$nrpPeople[m][6]}</person.url>
+		<person.category id="{$nrpPeople[m][8]}">{$nrpPeople[m][9]}</person.category>
+	</person>
+	{/section}
+
+	{section name=k loop=$nrpCourses}
+	<course id="{$nrpCourses[k][0]}">
+		<course.name>{$nrpCourses[k][1]}</course.name>
+		<course.comments>{$nrpCourses[k][2]}</course.comments>
+		<course.code>{$nrpCourses[k][3]}</course.code>
+		<course.group>{$nrpCourses[k][4]}</course.group>
+		<course.semester>{$nrpCourses[k][5]}</course.semester>
+		<course.year>{$nrpCourses[k][6]}</course.year>
+		<course.lecturer id="{$nrpCourses[k][7]}">{$nrpCourses[k][8]}</course.lecturer>
+	</course>
+	{/section}
+</nrp>

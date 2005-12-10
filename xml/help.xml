@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<?xml-stylesheet type="text/xsl" href='{$nrpTransform}' ?>
+
+<nrp>
+        <sess_id>{$nrpSessId}</sess_id>
+
+        <master_session>{$nrpMasterSession}</master_session>
+
+	<schedule id="{$nrpUserId}"/>
+
+	<doubt id="1">
+		<doubt.question>How can I schedule an appointment?</doubt.question>
+		<doubt.answer>You can schedule appointments from the weekly of daily schedules by clicking on a blank 
+appointment, or by entering 'Scheduling', and choosing Insert a New Appointment, or Insert a New Weekly Appointment.
+		</doubt.answer>
+	</doubt>
+
+	<doubt id="2">
+		<doubt.question>What is the difference between a weekly and an eventual appointment?</doubt.question>
+		<doubt.answer>A weekly appointment will be repeated every week, and an eventual appointment will occur only
+in one specific date.
+		</doubt.answer>
+	</doubt>
+
+	<doubt id="3">
+		<doubt.question>Is it possible to overlap a weekly appointment in a specific date?</doubt.question>
+		<doubt.answer>Yes, if there is an eventual appointment that will occur in the same time a weekly appointment
+usually occurs it is possible to overlap the weekly appointment only in one date. In the weekly schedule visualization, you
+may click on the button 'Modify appointment', related to the weekly appointment, and choose 'Overlap with an eventual appointment'.</doubt.answer>
+	</doubt>
+</nrp>

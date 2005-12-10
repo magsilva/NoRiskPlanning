@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<?xml-stylesheet type="text/xsl" href='{$nrpTransform}' ?>
+
+<nrp>
+	<sess_id>{$nrpSessId}</sess_id>
+
+	<master_session>{$nrpMasterSession}</master_session>
+	
+	{section name=i loop=$nrpSchErrors}
+	<error>{$nrpSchErrors[i]}</error>
+	{/section}
+
+	{section name=j loop=$nrpSchAlerts}
+	<alert>{$nrpSchAlerts[j]}</alert>
+	{/section}
+
+	{section name=l loop=$nrpSchTypeName}
+	<type>
+		<type.name>{$nrpSchTypeName[l]}</type.name>
+		<type.color>{$nrpSchTypeColor[l]}</type.color>
+		<type.image>{$nrpSchTypeImage[l]}</type.image>
+	</type>
+	{/section}
+
+	{section name=n loop=$nrpSchDays}
+		<dayofweek>{$nrpSchDays[n]}</dayofweek>
+	{/section}
+
+	{section name=n loop=$nrpSchMonths}
+		<month>{$nrpSchMonths[n]}</month>
+	{/section}
+
+	{section name=m loop=$nrpSchTimes}
+	<time>{$nrpSchTimes[m]}</time>
+	{/section}
+
+	{section name=p loop=$nrpRooms}
+	<room id="{$nrpRooms[p][0]}">
+		<room.code>{$nrpRooms[p][1]}</room.code>
+		<room.name>{$nrpRooms[p][2]}</room.name>
+		<room.capacity>{$nrpRooms[p][3]}</room.capacity>
+		<room.location>{$nrpRooms[p][4]}</room.location>
+		<room.comments>{$nrpRooms[p][5]}</room.comments>
+	</room>
+	{/section}
+
+	<ins_at_master>{$nrpSchInsMaster}</ins_at_master>
+
+	<schedule id="{$nrpUserId}" span="{$nrpSchSpan}">
+		<appointment id="{$nrpAppId}">
+			<appointment.periodicity>{$nrpPeriodicity}</appointment.periodicity>
+			<appointment.description>{$nrpDescription}</appointment.description>
+			<appointment.length>{$nrpLength}</appointment.length>
+			<appointment.date>
+				<appointment.date.day>{$nrpDay}</appointment.date.day>
+				<appointment.date.month>{$nrpMonth}</appointment.date.month>
+				<appointment.date.year>{$nrpYear}</appointment.date.year>
+			</appointment.date>
+			<appointment.beg_time id="{$nrpBegId}">{$nrpBeg}</appointment.beg_time>
+			<appointment.end_time id="{$nrpEndId}">{$nrpEnd}</appointment.end_time>
+			<appointment.type id="{$nrpTypeId}">{$nrpType}</appointment.type>
+			<appointment.color>{$nrpColor}</appointment.color>
+			<appointment.image>{$nrpImage}</appointment.image>
+			<appointment.dayofweek id="{$nrpDayOfWeekId}">{$nrpDayOfWeek}</appointment.dayofweek>
+			<appointment.url>{$nrpUrl}</appointment.url>
+			<appointment.owner>{$nrpOwner}</appointment.owner>
+			<appointment.group id="{$nrpGroupId}">{$nrpGroup}</appointment.group>
+			<appointment.authorized>{$nrpAuthorized}</appointment.authorized>
+			<appointment.before>{$nrpBefore}</appointment.before>
+			<appointment.after>{$nrpAfter}</appointment.after>
+			<appointment.room>{$nrpRoom}</appointment.room>
+		</appointment>
+	</schedule>
+</nrp>

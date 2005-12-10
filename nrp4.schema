@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+
+<database>
+
+	<name>nrp4</name>
+	<create>0</create>
+
+	<table>
+		<name>accounts</name>
+		<declaration>
+			<field> <name>account_id</name> <type>text</type> <length>32</length> <notnull>1</notnull> </field>
+			<field> <name>department_id</name> <type>integer</type> <notnull>1</notnull> </field>
+			<field> <name>name</name> <type>text</type> <notnull>1</notnull></field>
+			<field> <name>last_name</name> <type>text</type> <not_null>1</notnull></field>
+			<field> <name>email</name> <type>text</type> <notnull>1</notnull></field>
+			<field> <name>homepage</name> <type>text</type></field>
+			<field> <name>category</name> <type>text</type> <notnull>1</notnull></field>
+			<field> <name>password</name> <type>text</type> <length>32</length> <notnull>1</notnull></field>
+			<field> <name>image_elable</name> <type>text</type> </field>
+		</declaration>
+
+		<index>
+			<name>id_accounts</name>
+			<unique>1</unique>
+			<field> <name>account_id</name> </field>
+		</index>
+	</table>
+
+	<table>
+		<name>appointments</name>
+		<declaration>
+			<field> <name>app_id</name> <type>integer</type> <notnull>1</notnull> </field>
+			<field> <name>account_id</name> <type>text</type> <length>32</length> <notnull>1</notnull> </field>
+			<field> <name>description</name> <type>text</type> <length>100</length> <notnull>1</notnull> </field>
+			<field> <name>beg_day</name> <type>date</type> <notnull>1</notnull> </field>
+			<field> <name>end_day</name> <type>date</type> <notnull>1</notnull> </field>
+			<field> <name>beg_time</name> <type>integer</type> <notnull>1</notnull> </field>
+			<field> <name>end_time</name> <type>integer</type> <notnull>1</notnull> </field>
+			<field> <name>url</name> <type>text</type> <length>100</length> </field>
+			<field> <name>owner</name> <type>text</type> <length>32</length> <field>
+		</declaration>
+
+		<index>
+			<name>id_app</name>
+			<unique>1</unique>
+			<field> <name>app_id</name> </field>
+		</index>
+	</table>
+
+	<table>
+		<name>branchs</name>
+		<declaration>
+			<field> <name>branch_id</name> <type>integer</type> <notnull>1</notnull> </field>
+			<field> <name>name</name> <type>text</type> <length>50</length> <notnull>1</notnull> </field>
+			<field> <name>acronym</name> <type>text</type> <length>15</length> </field>
+			<field> <name>description</name> <type>text</type> </field>
+		</declaration>
+
+		<index>
+			<name>id_branch</name>
+			<unique>1</unique>
+			<field> <name>branch_id</name> </field>
+		</index>
+	</table>
+
+	<tale>
+		<name>chat_messages</name>
+		<declaration>
+			<field> <name>group_id</name> <type>integer</type> <notnull>1</notnull> </field>
+			<field> <name>name</name> <type>text</type> <notnull>1</notnull> </field>
+			<field> <name>message<name> <type>text</type> </field>
+			<field> <name>hour</name> <type>text</type> </field>
+			<field> <name>time</name> <type>integer</type> </field>
+		</declaration>
+	</table>
+
+	<table>
+		<name>courses</name>
+		<declaration>
+			<field> <name>course</name> <type>text</type> <length>10</length> <notnull>1</notnull> </field>
+			<field> <name>group</name> <type>text</type> <length>10</length> <notnull>1</notnull>
+			<field> <name>description</name> <type>text</type> <length>50</length> <notnull>1</notnull> </field>
+			<field> <name>acronym</name> <type>text</type> <length>10</length> </field>
+			<field> <name>professor</name> <type>text</type> <length>32</length> </field>
+			<field> <name>comments</name> <type>text</type> </field>
+			<field> <name>password</name> <type>text</type> <length>32</length> <notnull>1</notnull> </field>
+		</declaration>
+
+		<index>
+			<name>id_course</name>
+			<unique>1</unique>
+			<field> <name>course</name> </field>
+			<field> <name>group</name> </field>
+		</index>
+	</table>
+
+	<table>
+		<name>departments</name>
+		<declaration>
+			<field> <name>dep_id</name> <type>integer</type> <notnull>1</notnull> </field>
+			<field> <name>branch_id</name> <type>integer</type> <notnull>1</notnull> </field>
+			<field> <name>name</name> <type>text</type> <length>50</length> <notnull>1</notnull> </field>
+			<field> <name>acronym</name> <type>text</type> <length>10</length> </field>
+			<field> <name>description</name> <type>text</type> <length>100</length> <notnull>1</notnull> </field>
+		</declaration>
+
+		<index>
+			<name>id_department</name>
+			<unique>1</unique>
+			<field> <name>dep_id</name> </field>
+		</index>
+	</table>
+
+	<table>
+		<name>group_category</name>
+		<declaration>
+			<field> <name>category_id</name> <type>integer</type> <notnull>1</notnull> </field>
+			<field> <name>name</name> <type>text</type> <length>30</length> <notnull>1</notnull> </field>
+		</declaration>
+
+		<index>
+			<name>id_category</name>
+			<unique>1</unique>
+			<field> <name>category_id</name></field>
+		</index>
+	</table>
+
+	<table>
+		<name>group_docs</name>
+		<declaration>
+			<field> <name>group_id</name> <type>integer</type> <notnull>1</notnull> </field>
+			<field> <name>url</name> <type>text</type> <notnull>1</notnull> </field>
+			<field> <namd>size</name> <type>integer</type> <notnull>1</notnull> </field>
+			<field> <name>description</name> <type>text</type> <notnull>1</notnull> </field>
+		</declaration>
+	</table>
+
+	<table>
+		<name>group_members</name>
+		<declaration>
+			<field> <name>group_id</name> <type>integer</type> <notnull>1</notnull> </field>
+			<field> <name>acount_id</name> <type>text</type> <length>32</length> <notnull>1</notnull> </field>
+			<field> <name>membership</name> <type>text</type> <length>1</length> <notnull>1</notnull> </field>
+			<field> <name>confirmation_code</name> <type>text</type> </field>
+		</declaration>
+
+		<index>
+			<name>group_member_id</name>
+			<unique>1</unique>
+			<field> <name>group_id</name> <name>account_id</name> </field>
+		</index>
+	</table>
+
+	<table>
+		<name>group_notices</name>
+		<declaration>
+			<field> <name>group_id</name> <type>integer</type> <notnull>1</notnull> </field>
+			<field> <name>notice_id</name> <type>integer </type> <notnull>1</notnull> </field>
+			<field> <name>description</name> <type>text</type> <notnull>1</notnull> </field>
+		</declaration>
+
+		<index>
+			<name>group_notice_id</name>
+			<unique>1</unique>
+			<field> <name>notice_id</name> </field>
+		</index>
+	</table>
+
+	<sequence>
+		<name>app_sequence</name>
+		<start>1</start>
+		<on>
+			<field>app_id</field>
+			<table>appointments</table>
+		</on>
+	</sequence>
+
+	<sequence>
+		<name>branch_sequence</name>
+		<start>1</start>
+		<on>
+			<field>branch_id</field>
+			<table>branchs</table>
+		</on>
+	</sequence>
+
+	<sequence>
+		<name>department_sequence</name>
+		<start>1</start>
+		<on>
+			<field>dep_id</field>
+			<table>departments</table>
+		</on>
+	</sequence>
+
+	<sequence>
+		<name>group_category_sequence</name>
+		<start>1</start>
+		<on>
+			<field>category_id</field>
+			<table>group_category</table>
+		</on>
+	</sequence>
+
+	<sequence>
+		<name>group_notice_sequence</name>
+		<start>1</start>
+		<on>
+			<field>notice_id</field>
+			<table>group_notices</table>
+		</on>
+	</sequence>
+</database>
+

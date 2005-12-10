@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<?xml-stylesheet type="text/xsl" href='{$nrpTransform}' ?>
+
+<nrp>
+	<sess_id>{$nrpSessId}</sess_id>
+	
+	{section name=i loop=$nrpSchErrors}
+	<error>{$nrpSchErrors[i]}</error>
+	{/section}
+
+	{section name=j loop=$nrpSchAlerts}
+	<alert>{$nrpSchAlerts[j]}</alert>
+	{/section}
+
+	{section name=k loop=$nrpCategories}
+	<category id="{$nrpCategories[k][0]}">
+		<category.name>{$nrpCategories[k][1]}</category.name>
+		<category.description>{$nrpCategories[k][2]}</category.description>
+	</category>
+	{/section}
+</nrp>

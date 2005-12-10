@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<?xml-stylesheet type="text/xsl" href='{$nrpTransform}' ?>
+
+<nrp>
+
+	<sess_id>{$nrpSessId}</sess_id>
+	
+	<master_session>{$nrpMasterSession}</master_session>
+
+	{section name=i loop=$nrpSchedErrors}
+	<error>{$nrpSchedErrors[i]}</error>
+	{/section}
+
+	{section name=j loop=$nrpSchedAlerts}
+	<alert>{$nrpSchedAlerts[j]}</alert>
+	{/section}
+
+	<schedule id="{$nrpUserId}"/>
+</nrp>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<?xml-stylesheet type="text/xsl" href='{$nrpTransform}' ?>
+
+<nrp>
+	<sess_id>{$nrpSessId}</sess_id>
+	
+	{section name=i loop=$nrpSchErrors}
+	<error>{$nrpSchErrors[i]}</error>
+	{/section}
+
+	{section name=j loop=$nrpSchAlerts}
+	<alert>{$nrpSchAlerts[j]}</alert>
+	{/section}
+
+	{section name=k loop=$nrpUnits}
+	<unit id="{$nrpUnits[k][0]}">
+		<unit.name>{$nrpUnits[k][1]}</unit.name>
+		<unit.acronym>{$nrpUnits[k][2]}</unit.acronym>
+		<unit.description>{$nrpUnits[k][3]}</unit.description>
+	</unit>
+	{/section}
+
+	{section name=l loop=$nrpDepartments}
+	<department id="{$nrpDepartments[l][0]}">
+		<department.name>{$nrpDepartments[l][1]}</department.name>
+		<department.acronym>{$nrpDepartments[l][2]}</department.acronym>
+		<department.description>{$nrpDepartments[l][3]}</department.description>
+		<department.unit id="{$nrpDepartments[l][4]}">{$nrpDepartments[l][5]}</department.unit>
+	</department>
+	{/section}
+</nrp>

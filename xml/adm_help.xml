@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<?xml-stylesheet type="text/xsl" href='{$nrpTransform}' ?>
+
+<nrp>
+        <sess_id>{$nrpSessId}</sess_id>
+
+        <master_session>{$nrpMasterSession}</master_session>
+
+	<schedule id="{$nrpUserId}"/>
+
+	<doubt id="1">
+		<doubt.question>How can I create a user?</doubt.question>
+		<doubt.answer>A Person Account may be created by entering 'Accounts', 'People', 'Create New Person'. 
+The person data must be filled in, and then a e-mail will be sent to the user with the account id and password. 
+		</doubt.answer>
+	</doubt>
+
+	<doubt id="2">
+		<doubt.question>What are permissions for?</doubt.question>
+		<doubt.answer>A permission is used to enable a person to handle a course or room schedule. The permissions
+may be assign to a single person, to a category of people or to a group.
+		</doubt.answer>
+	</doubt>
+</nrp>

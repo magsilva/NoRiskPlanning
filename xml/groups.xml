@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<?xml-stylesheet type="text/xsl" href='{$nrpTransform}' ?>
+
+<nrp>
+	<sess_id>{$nrpSessId}</sess_id>
+
+	{section name=i loop=$nrpSchedErrors}
+	<error>{$nrpSchedErrors[i]}</error>
+	{/section}
+
+	{section name=j loop=$nrpSchedAlerts}
+	<alert>{$nrpSchedAlerts[j]}</alert>
+	{/section}
+
+	<schedule id="{$nrpUserId}"/>
+
+	{section name=k loop=$nrpPeople}
+	<person id="{$nrpPeople[k][0]}">
+		<person.name>{$nrpPeople[k][1]}</person.name>
+		<person.comments>{$nrpPeople[k][2]}</person.comments>
+		<person.department id="{$nrpPeople[k][3]}">{$nrpPeople[k][4]}</person.department>
+		<person.email>{$nrpPeople[k][5]}</person.email>
+		<person.url>{$nrpPeople[k][6]}</person.url>
+		<person.category id="{$nrpPeople[k][8]}">{$nrpPeople[k][9]}</person.category>
+	</person>
+	{/section}
+
+	{section name=n loop=$nrpGroups}
+	<group id="{$nrpGroups[n][0]}">
+		<group.category>{$nrpGroups[n][2]}</group.category>
+		<group.name>{$nrpGroups[n][1]}</group.name>
+		<group.acronym>{$nrpGroups[n][3]}</group.acronym>
+		<group.description>{$nrpGroups[n][4]}</group.description>
+		{section name=o loop=$nrpGroups[n][5]}
+		<group.member id="{$nrpGroups[n][5][o][0]}">
+			<group.member.name>{$nrpGroups[n][5][o][1]}</group.member.name>
+			<group.member.membership>{$nrpGroups[n][5][o][2]}</group.member.membership>
+		</group.member>
+		{/section}
+	</group>
+	{/section}
+
+	{section name=o loop=$nrpNotices}
+	<notice id="{$nrpNotices[o][0]}" group_id="{$nrpNotices[o][1]}">
+		<notice.owner>{$nrpNotices[o][2]}</notice.owner>
+		<notice.text>{$nrpNotices[o][3]}</notice.text>
+		<notice.date>{$nrpNotices[o][4]}</notice.date>
+		<notice.time>{$nrpNotices[o][5]}</notice.time>
+	</notice>
+	{/section}
+
+	{section name=p loop=$nrpDocuments}
+	<document id="{$nrpDocuments[p][0]}" group_id="{$nrpDocuments[p][1]}">
+		<document.owner>{$nrpDocuments[p][2]}</document.owner>
+		<document.url>{$nrpDocuments[p][3]}</document.url>
+		<document.size>{$nrpDocuments[p][4]}</document.size>
+		<document.description>{$nrpDocuments[p][5]}</document.description>
+		<document.name>{$nrpDocuments[p][6]}</document.name>
+	</document>
+	{/section}
+</nrp>

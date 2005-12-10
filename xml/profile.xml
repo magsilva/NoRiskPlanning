@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<?xml-stylesheet type="text/xsl" href='{$nrpTransform}' ?>
+
+<nrp>
+
+	<sess_id>{$nrpSessId}</sess_id>
+
+	{section name=i loop=$nrpMainErrors}
+	<error>{$nrpMainErrors[i]}</error>
+	{/section}
+
+	{section name=j loop=$nrpMainAlerts}
+	<alert>{$nrpMainAlerts[j]}</alert>
+	{/section}
+
+	<user id="{$nrpUserId}">
+		<name>{$nrpUserName}</name>
+		<role>{$nrpRole}</role>
+		<user_dep id="{$nrpDepId}">{$nrpUserDepName}</user_dep>
+		<email>{$nrpEmail}</email>
+		<url>{$nrpUrl}</url>
+		<category id="{$nrpCategoryId}">{$nrpCategory}</category>
+		<comments>{$nrpComments}</comments>
+		{section name=l loop=$nrpEnableTypes}
+		<image_enable type="{$nrpEnableTypes[l]}">{$nrpImageEnableValue[l]}</image_enable>
+		{/section}
+	</user>
+</nrp>

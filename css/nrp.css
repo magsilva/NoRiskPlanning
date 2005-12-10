@@ -1,0 +1,324 @@
+body
+{
+scrollbar-face-color: #408383;
+scrollbar-shadow-color: #ffffff;
+scrollbar-highlight-color: #ffffff;
+scrollbar-3dlight-color: #E0E4E4;
+scrollbar-darkshadow-color: #000000;
+scrollbar-track-color: #E0E4E4;
+scrollbar-arrow-color: #E0E4E4;
+font-size: 70%;
+color:#000000;
+background-color:#ffffff;
+margin-top:5px;
+margin-left:0px;
+margin-right:0px;
+margin-bottom:0px;
+}
+
+body, p, h1, h2, h3, table, td, th, ul, ol, textarea, input
+{
+font-family: verdana,arial,helvetica,sans-serif;
+}
+
+a:link {
+   color: #408383;
+   text-decoration: none;
+}
+
+a:visited {
+   color: #408383;
+   text-decoration: none;
+}
+
+a:active {
+   color: #408383;
+   text-decoration: none;
+}
+
+
+table, input, textarea
+{
+font-size: 100%;
+}
+
+input.button
+{
+BORDER-RIGHT: #000000 1px solid;
+BORDER-TOP: #000000 1px solid;
+FONT-WEIGHT: bold;
+COLOR: #408383;
+FONT-SIZE: 12px;
+BORDER-LEFT: #000000 1px solid;
+BORDER-BOTTOM: #000000 1px solid;
+FONT-FAMILY: Arial;
+BACKGROUND-COLOR: #E0E4E4
+}
+
+div.top_screen
+{
+background-color: #E0E4E4;
+border-color: #408383;
+border-style: solid;
+border-width: 1px;
+width: 90%;
+margin-left: auto;
+margin-right: auto;
+}
+
+div.location
+{
+background-color: #F7F7F7;
+border-color: #408383;
+border-style: solid;
+border-width: 1px;
+width: 90%;
+margin-left: auto;
+margin-right: auto;
+font-family: arial;
+font-size: small;
+text-align: left;
+}
+
+div.mid_screen
+{
+background-color: #FFFFFF;
+border-color: #408383;
+border-style: solid;
+border-width: 1px;
+width: 90%;
+margin-left: auto;
+margin-right: auto;
+text-align: center;
+}
+
+div.down_screen
+{
+background-color: #E0E4E4;
+border-color: #408383;
+border-style: solid;
+border-width: 1px;
+width: 90%;
+margin-left: auto;
+margin-right: auto;
+}
+
+div.column1
+{
+background-color: #FFFFFF;
+border: none;
+width: 1%;
+float:left;
+}
+
+div.column2
+{
+background-color: #FFFFFF;
+border: none;
+width: 20%;
+float:left;
+}
+
+
+h1 {font-size:160%;}
+h2 {font-size:120%;margin-top:10px;margin-bottom:10px;}
+h3 {font-size:110%;}
+h4 {font-size:100%;}
+h5 {font-size:90%;}
+h6 {font-size:80%;}
+
+p.big_head
+{
+font-family: verdana;
+font-size: medium;
+font-weight: bold;
+}
+
+p.big_head_pop
+{
+font-family: verdana;
+font-size: 120%;
+text-align:center;
+font-weight: bold;
+}
+
+p.big_title
+{
+font-family: verdana;
+font-size: medium;
+font-weight: bold;
+color: #408383;
+}
+
+label
+{
+font-family: verdana;
+font-size:small;
+font-weight:bold;
+}
+
+p.alert
+{
+font-family: arial;
+font-size:medium;
+font-weight:bold;
+color: #0000FF;
+}
+
+p.error
+{
+font-family: arial;
+font-size: medium;
+font-weight:bold;
+color: #FF0000;
+}
+
+p.alert_pop
+{
+font-family: arial;
+font-size:110%;
+text-align:center;
+font-weight:bold;
+color: #0000FF;
+}
+
+p.error_pop
+{
+font-family: arial;
+text-align:center;
+font-size: 110%;
+font-weight:bold;
+color: #FF0000;
+}
+
+p.menu
+{
+font-family: arial;
+font-size: medium;
+font-weight:bold;
+color: #804343;
+text-align: center;
+word-spacing: 30px;
+text-transform: capitalize;
+}
+
+p.options
+{
+font-family: arial;
+font-size: medium;
+font-weight:bold;
+color: #804343;
+text-align: left;
+text-transform: capitalize;
+}
+
+p.options_center
+{
+font-family: arial;
+font-size: medium;
+font-weight:bold;
+color: #804343;
+text-align: center;
+text-transform: capitalize;
+}
+
+p.options_center
+{
+font-family: arial;
+font-size: medium;
+font-weight:bold;
+color: #408383;
+text-align: center;
+text-transform: capitalize;
+}
+
+p.description_center
+{
+font-family: arial;
+font-size: 110%;
+text-align: center;
+}
+
+
+p.options_right
+{
+font-family: arial;
+font-size: medium;
+font-weight:bold;
+color: #408383;
+text-align: right;
+text-transform: capitalize;
+}
+
+th.al_left
+{
+text-align: center;
+}
+
+th.sch_title
+{
+background-color: #EFEFEF;
+font-family: arial;
+font-size: 120%;
+font-weight:bold;
+color: #408383;
+text-align: center;
+text-transform: capitalize;
+}
+
+th.sch_title1
+{
+background-color: #EFEFEF;
+font-family: arial;
+font-size: 100%;
+font-weight:bold;
+color: #408383;
+text-align: center;
+text-transform: capitalize;
+}
+
+td.al_center
+{
+text-align: center;
+}
+
+td.sch_month_day
+{
+background-color: #EFEFEF;
+font-family: arial;
+font-size: 100%;
+font-weight:bold;
+text-align: center;
+text-transform: capitalize;
+}
+
+td.appointment
+{
+text-align: center;
+font-family: arial;
+font-size: 110%;
+}
+
+td.appointment_month
+{
+font-family: arial;
+font-size: 110%;
+vertical-align:top;
+}
+
+td.sch_time
+{
+background-color: #EFEFEF;
+font-family: arial;
+font-size: 110%;
+font-weight:bold;
+color: #408383;
+text-align: center;
+text-transform: capitalize;
+}
+
+table.data
+{
+font-size: 100%;
+padding: 20px;
+}

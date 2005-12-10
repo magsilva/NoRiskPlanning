@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<?xml-stylesheet type="text/xsl" href='{$nrpTransform}' ?>
+
+<nrp>
+	<sess_id>{$nrpSessId}</sess_id>
+
+	<master_session>{$nrpMasterSession}</master_session>
+	
+	{section name=i loop=$nrpSchErrors}
+	<error>{$nrpSchErrors[i]}</error>
+	{/section}
+
+	{section name=j loop=$nrpSchAlerts}
+	<alert>{$nrpSchAlerts[j]}</alert>
+	{/section}
+
+	<schedule id="{$nrpUserId}" span="{$nrpSchSpan}">
+	{section name=k loop=$nrpMainApp}
+		<appointment id="{$nrpMainApp[k][0]}">
+			<appointment.periodicity>{$nrpMainApp[k][1]}</appointment.periodicity>
+			<appointment.description>{$nrpMainApp[k][2]}</appointment.description>
+			<appointment.length>{$nrpMainApp[k][3]}</appointment.length>
+			<appointment.date>
+				<appointment.date.day>{$nrpMainApp[k][4]}</appointment.date.day>
+				<appointment.date.month>{$nrpMainApp[k][5]}</appointment.date.month>
+				<appointment.date.year>{$nrpMainApp[k][6]}</appointment.date.year>
+			</appointment.date>
+			<appointment.beg_time id="{$nrpMainApp[k][7]}">{$nrpMainApp[k][8]}</appointment.beg_time>
+			<appointment.end_time id="{$nrpMainApp[k][9]}">{$nrpMainApp[k][10]}</appointment.end_time>
+			<appointment.type id="{$nrpMainApp[11]}">{$nrpMainApp[k][12]}</appointment.type>
+			<appointment.color>{$nrpMainApp[k][13]}</appointment.color>
+			<appointment.image>{$nrpMainApp[k][14]}</appointment.image>
+			<appointment.dayofweek id="{$nrpMainApp[k][15]}">{$nrpMainApp[k][16]}</appointment.dayofweek>
+			<appointment.url>{$nrpMainApp[k][17]}</appointment.url>
+			<appointment.owner>{$nrpMainApp[k][18]}</appointment.owner>
+			<appointment.group id="{$nrpGroupId}">{$nrpGroup}</appointment.group>
+		</appointment>
+	{/section}
+	</schedule>
+</nrp>

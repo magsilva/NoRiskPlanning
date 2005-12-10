@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<?xml-stylesheet type="text/xsl" href='{$nrpTransform}' ?>
+
+<nrp>
+	{section name=i loop=$nrpIndexErrors}
+	<error>{$nrpIndexErrors[i]}</error>
+	{/section}
+
+	{section name=j loop=$nrpIndexAlerts}
+	<alert>{$nrpIndexAlerts[j]}</alert>
+	{/section}
+
+	<schedule id="{$nrpUserId}"/>
+</nrp>
