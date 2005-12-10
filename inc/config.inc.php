@@ -29,15 +29,15 @@ The main features of the system will be defined by these parameters.
 
 $cfg['db_type']               = 'mysql';        // Database type
 $cfg['server_db']             = 'localhost';    // Database server address
-$cfg['user_db']               = 'user';     // Database username
-$cfg['password_db']           = 'senha';      // Database password
-$cfg['bdname']                = 'nrp4';         // Database name
+$cfg['user_db']               = 'norisk';     // Database username
+$cfg['password_db']           = 'NRPdev2';      // Database password
+$cfg['bdname']                = 'norisk';         // Database name
 
 $cfg['institution_name']     = 'Universidade de São Paulo'; // Name of the Institution
 $cfg['institution_acronym']   = 'USP';          // Institution's acronym
 
-$cfg['url']                   = 'http://vinho.intermidia.icmc.usp.br/norisk/';  // URL of the directory where the system runs
-$cfg['directory']             = '/srv/www/default/html/norisk/';  // Path of the server directory where the system runs
+$cfg['url']                   = 'http://notsafe.icmc.usp.br/norisk/';  // URL of the directory where the system runs
+$cfg['directory']             = '/var/www/norisk/';  // Path of the server directory where the system runs
 $cfg['docs_directory']        = 'docs/'; // Path of the directory to upload group documents
 $cfg['admin_email']           = 'apfreire@grad.icmc.usp.br';
 // E-mail of the admin (will be used to mails sent by the system)
@@ -58,7 +58,7 @@ $cfg['group_notices_number'] = 5;               // Default Number of groups noti
 // Sets the types of appointments which will be available for common users
 $cfg['user_type'][0]          = 'Common';       // Name of the type
 $cfg['user_color'][0]         = 'FFCC66';       // Color of the appointments of this type
-$cfg['user_icon'][0]          = '';             // Image to be shown in appointments of this type
+$cfg['user_icon'][0]          = 'images/common.gif';             // Image to be shown in appointments of this type
 
 $cfg['user_type'][1]          = 'Academic';
 $cfg['user_color'][1]         = 'E8F3FF';
@@ -166,7 +166,7 @@ $cfg['time'][6] = '13:20';
 // The configurations below will be used to generate the schedule .png image
 
 $cfg['space'] = 5;                 // Space between squares (in pixels)
-$cfg['bold_font'] = '/home/andre/arialbd.ttf'; // Path to the TTF file for Bold arial font
-$cfg['font'] = '/home/andre/arial.ttf'; // Path to the TTF file for arial
+$cfg['bold_font'] = '/var/www/norisk/arialbd.ttf'; // Path to the TTF file for Bold arial font
+$cfg['font'] = '/var/www/norisk/arial.ttf'; // Path to the TTF file for arial
 
 ?>
