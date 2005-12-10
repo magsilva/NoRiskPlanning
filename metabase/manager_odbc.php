@@ -6,7 +6,7 @@ if(!defined("METABASE_MANAGER_ODBC_INCLUDED"))
 /*
  * manager_odbc.php
  *
- * @(#) $Header: /cvsroot/nrp/nrp/metabase/manager_odbc.php,v 1.1.1.1 2004/05/20 19:37:21 apfreire Exp $
+ * @(#) $Header: /cvsroot/phpsecurityadm/metabase/manager_odbc.php,v 1.1.1.1 2003/02/27 20:55:09 koivi Exp $
  *
  */
 

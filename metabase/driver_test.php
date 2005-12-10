@@ -2,7 +2,7 @@
 /*
  * driver_test.php
  *
- * @(#) $Header: /cvsroot/nrp/nrp/metabase/driver_test.php,v 1.1.1.1 2004/05/20 19:37:20 apfreire Exp $
+ * @(#) $Header: /cvsroot/phpsecurityadm/metabase/driver_test.php,v 1.1.1.1 2003/02/27 20:55:09 koivi Exp $
  *
  * This is a script intended to be used by Metabase DBMS driver class
  * developers or other users to verify if the implementation of a given

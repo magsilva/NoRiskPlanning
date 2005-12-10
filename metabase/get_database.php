@@ -2,7 +2,7 @@
 /*
  * get_database.php
  *
- * @(#) $Header: /cvsroot/nrp/nrp/metabase/get_database.php,v 1.1.1.1 2004/05/20 19:37:20 apfreire Exp $
+ * @(#) $Header: /cvsroot/phpsecurityadm/metabase/get_database.php,v 1.1.1.1 2003/02/27 20:55:09 koivi Exp $
  *
  */
 
