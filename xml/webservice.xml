@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+
+	{section name=l loop=$nrpMainTime}
+	<time>{$nrpMainTime[l]}</time>
+	{/section}
+
+	<user_id>{$nrpUserId}</user_id>
+
+	{section name=t loop=$nrpMainType}
+	<app_type>
+		<app_type.name>{$nrpMainType[t]}</app_type.name>
+		<app_type.color>{$nrpMainTypeColor[t]}</app_type.color>
+		<app_type.icon>{$nrpMainTypeIcon[t]}</app_type.icon>
+	</app_type>
+	{/section}
+
+	{section name=x loop=$nrpMainDaysOfWeek}
+	<day_of_week>{$nrpMainDaysOfWeek[x]}</day_of_week>
+	{/section}
+
+	{section name=v loop=$nrpMainDays}
+	<date id="{$nrpMainDays[v][0]}" week="{$nrpMainDays[v][1]}">
+		<date.day>{$nrpMainDays[v][2]}</date.day>
+		<date.month>{$nrpMainDays[v][3]}</date.month>
+		<date.year>{$nrpMainDays[v][4]}</date.year>
+		<date.dayofweek id="{$nrpMainDays[v][5]}">{$nrpMainDays[v][6]}</date.dayofweek>
+	</date>
+	{/section}
+
+{section name=o loop=$nrpMainApp}
+	<schedule id="{$nrpGroups[0][5][o][0]}" span="{$nrpSchSpan}">
+		<span_start>
+			<span_start.day>{$nrpSpanStartDay}</span_start.day>
+			<span_start.month name="{$nrpSpanStartMonthName}">{$nrpSpanStartMonth}</span_start.month>
+			<span_start.year>{$nrpSpanStartYear}</span_start.year>
+			<span_start.day_of_week id="{$nrpSpanEndDayOfWeekId}">{$nrpSpanStartDayOfWeek}</span_start.day_of_week>
+		</span_start>
+		<span_end>
+			<span_end.day>{$nrpSpanEndDay}</span_end.day>
+			<span_end.month name="{$nrpSpanEndMonthName}">{$nrpSpanEndMonth}</span_end.month>
+			<span_end.year>{$nrpSpanEndYear}</span_end.year>
+			<span_end.day_of_week id="{$nrpSpanEndDayOfWeekId}">{$nrpSpanEndDayOfWeek}</span_end.day_of_week>
+		</span_end>
+	{section name=k loop=$nrpMainApp[o]}
+		<appointment id="{$nrpMainApp[o][k][0]}">
+			<appointment.periodicity>{$nrpMainApp[o][k][1]}</appointment.periodicity>
+			<appointment.description>{$nrpMainApp[o][k][2]}</appointment.description>
+			<appointment.length>{$nrpMainApp[o][k][3]}</appointment.length>
+			<appointment.date>
+				<appointment.date.day>{$nrpMainApp[o][k][4]}</appointment.date.day>
+				<appointment.date.month>{$nrpMainApp[o][k][5]}</appointment.date.month>
+				<appointment.date.year>{$nrpMainApp[o][k][6]}</appointment.date.year>
+			</appointment.date>
+			<appointment.beg_time id="{$nrpMainApp[o][k][7]}">{$nrpMainApp[o][k][8]}</appointment.beg_time>
+			<appointment.end_time id="{$nrpMainApp[o][k][9]}">{$nrpMainApp[o][k][10]}</appointment.end_time>
+			<appointment.type id="{$nrpMainApp[o][k][11]}">{$nrpMainApp[o][k][12]}</appointment.type>
+			<appointment.color>{$nrpMainApp[o][k][13]}</appointment.color>
+			<appointment.image>{$nrpMainApp[o][k][14]}</appointment.image>
+			<appointment.dayofweek id="{$nrpMainApp[o][k][15]}">{$nrpMainApp[o][k][16]}</appointment.dayofweek>
+			<appointment.url>{$nrpMainApp[o][k][17]}</appointment.url>
+			<appointment.owner>{$nrpMainApp[o][k][18]}</appointment.owner>
+			<appointment.group id="{$nrpMainApp[o][k][19]}">{$nrpMainApp[o][k][20]}</appointment.group>
+			<appointment.authorized>{$nrpMainApp[o][k][21]}</appointment.authorized>
+			<appointment.before>{$nrpMainApp[o][k][22]}</appointment.before>
+			<appointment.after>{$nrpMainApp[o][k][23]}</appointment.after>
+		</appointment>
+	{/section}
+	</schedule>
+{/section}
+
+	{section name=n loop=$nrpGroups}
+	<group id="{$nrpGroups[n][0]}">
+		<group.category>{$nrpGroups[n][2]}</group.category>
+		<group.name>{$nrpGroups[n][1]}</group.name>
+		<group.acronym>{$nrpGroups[n][3]}</group.acronym>
+		<group.description>{$nrpGroups[n][4]}</group.description>
+		{section name=o loop=$nrpGroups[n][5]}
+		<group.member id="{$nrpGroups[n][5][o][0]}">
+			<group.member.name>{$nrpGroups[n][5][o][1]}</group.member.name>
+			<group.member.membership>{$nrpGroups[n][5][o][2]}</group.member.membership>
+		</group.member>
+		{/section}
+	</group>
+	{/section}

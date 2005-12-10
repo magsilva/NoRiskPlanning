@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<?xml-stylesheet type="text/xsl" href='{$nrpTransform}' ?>
+
+<nrp>
+
+	<sess_id>{$nrpSessId}</sess_id>
+
+	{section name=i loop=$nrpSchedErrors}
+	<error>{$nrpSchedErrors[i]}</error>
+	{/section}
+
+	{section name=j loop=$nrpSchedAlerts}
+	<alert>{$nrpSchedAlerts[j]}</alert>
+	{/section}
+
+	<groups_number>{$nrpNumGroups}</groups_number>
+	<categories_number>{$nrpNumCateg}</categories_number>
+	<people_number>{$nrpNumPeople}</people_number>
+	<departments_number>{$nrpNumDeps}</departments_number>
+	<units_number>{$nrpNumUnits}</units_number>
+	<courses_number>{$nrpNumCourses}</courses_number>
+	<rooms_number>{$nrpNumRooms}</rooms_number>
+</nrp>

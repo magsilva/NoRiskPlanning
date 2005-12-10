@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<?xml-stylesheet type="text/xsl" href='{$nrpTransform}' ?>
+
+<nrp>
+
+	<sess_id>{$nrpSessId}</sess_id>
+
+	{section name=i loop=$nrpSchErrors}
+	<error>{$nrpSchErrors[i]}</error>
+	{/section}
+
+	{section name=j loop=$nrpSchAlerts}
+	<alert>{$nrpSchAlerts[j]}</alert>
+	{/section}
+
+	<schedule id="{$nrpUserId}"/>
+
+	{section name=k loop=$nrpRooms}
+	<room id="{$nrpRooms[k][0]}">
+		<room.name>{$nrpRooms[k][1]}</room.name>
+		<room.comments>{$nrpRooms[k][2]}</room.comments>
+		<room.code>{$nrpRooms[k][3]}</room.code>
+		<room.capacity>{$nrpRooms[k][4]}</room.capacity>
+		<room.location>{$nrpRooms[k][5]}</room.location>
+		<room.type>{$nrpRooms[k][6]}</room.type>
+	</room>
+	{/section}
+</nrp>
