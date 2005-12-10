@@ -1,0 +1,85 @@
+No Risk Planning 2.0 
+GNU/GPL License
+http://incubadora.fapesp.br/projects/nrp
+
+Universidade de São Paulo
+Instituto de Ciências Matemáticas e de Computação
+Departamento de Ciências de Computação e Estatística
+Intermidia Laboratory
+http://www.intermidia.icmc.usp.br
+
+This project is funded by FAPESP
+
+--------------------------------------------------------------
+No Risk Planning - Instalation Guide
+--------------------------------------------------------------
+
+0. Requirements:
+
+No Risk Planning is a web based group calendar, developed
+using PHP and MySQL.
+
+To install it, you will need to have a web server (like Apache)
+with PHP, and a MySQL server.
+
+To process XSLT server side, you will need to compile your PHP
+with -enable-xslt. To do so, you have to include the 
+parameter --enable-xslt in your configure command line, like:
+
+configure --enable-xslt
+
+If you want to use the automatic generation of the .png image
+of the schedule, you will have to compile your PHP with
+--without-gd, like:
+
+configure --without-gd
+
+-------------------------------------------------------------
+
+1. Instalation Process
+
+After you have installed all the required features in your
+computer, do the following:
+
+a) Uncompress the source files in your desired directory.
+
+b) Create a user and a database in your MySQL to be used by 
+No Risk Planning.
+
+c) Set the configurations of your No Risk Planning in the file
+inc/config.inc.php
+This file contains all the configurations of your schedule.
+Pay attention at the database configuration, at the
+appointment types, and the schedule periodicity.
+
+d) Set the writing permissions to the directories docs and
+smarty/template_c, using 'chmod 707 docs' and
+'chmod 707 smarty/template_c'.
+
+e) Create an account at MySQL and a database to be used by 
+No Risk Planning.
+This can be done using the commands:
+1) CREATE DATABASE database_name;
+2) GRANT ALL PRIVILEGES ON database_name.* TO user@server IDENTIFIED BY 'password';
+3) FLUSH PRIVILEGES;
+
+* Usually server is localhost
+
+f) Initialize the database using the command:
+'mysql -u user -p < nrp.sql'
+
+After you have installed No Risk Planning, 
+you may add new users in the Administrator mode.
+To enter the Administrator mode, open the system,
+and use the id 'admin'. The first password for this
+user will be set as 'noriskadmin', and you may change
+it as soon as you want to.
+
+-------------------------------------------------------------
+
+Note: If you have a previous version of No Risk Planning,
+open the file 'old_nrp_conversion.php', located in the /inc directory
+, set the configurations
+of the old database, and use the 
+command 'php old_nrp_conversion.php' in order to transfer 
+the data to the new database.

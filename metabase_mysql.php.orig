@@ -6,7 +6,7 @@ if(!defined("METABASE_MYSQL_INCLUDED"))
 /*
  * metabase_mysql.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/metabase_mysql.php,v 1.1.1.1 2003/02/27 20:55:34 koivi Exp $
+ * @(#) $Header: /cvsroot/nrp/nrp/metabase_mysql.php,v 1.72 2004/10/26 18:34:36 apfreire Exp $
  *
  */
  

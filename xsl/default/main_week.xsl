@@ -57,7 +57,7 @@ function show( hp, wdt, hgt ) {	properties = 'toolbar=no,location=no,directories
 Weekly Schedule - <xsl:value-of select="/nrp/schedule/span_start/span_start.month"/>/<xsl:value-of select="/nrp/schedule/span_start/span_start.day"/>/<xsl:value-of select="/nrp/schedule/span_start/span_start.year"/> to <xsl:value-of select="/nrp/schedule/span_end/span_end.month"/>/<xsl:value-of select="/nrp/schedule/span_end/span_end.day"/>/<xsl:value-of select="/nrp/schedule/span_end/span_end.year"/>
 </p>
 
-<p class="small_head">To schedule appointments, click on the link in the blank cells of the table.</p>
+<p class="small_head">To schedule appointments, click on the blank cells of the table.</p>
 
 <form method="POST" action="main.php">
 <p class="big_head">

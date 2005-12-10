@@ -22,8 +22,6 @@ xml:lang="en-US">
 <xsl:variable name="mainurl" select="concat('main.php?sess_id=', $session_id)" />
 
 
-
-
 <div class="location">
 Your location: NRP / <xsl:value-of select="/nrp/user/@id"/> / 
 <a>
@@ -139,6 +137,8 @@ Your location: NRP / <xsl:value-of select="/nrp/user/@id"/> /
 		<xsl:value-of select="$session_id"/>
 	</xsl:attribute>
 </input>
+
+<input type="submit" class="button" name="submit" value="Confirm"/>
 
 
 </form>
