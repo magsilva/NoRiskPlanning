@@ -10,7 +10,8 @@ require("./inc/session_handler.php");
 // Start the template handling component
 define("SMARTY_DIR","./smarty/");
 require(SMARTY_DIR."Smarty.class.php");
-$smarty = new Smarty;
+require("./inc/NoRiskSmarty.class.php");
+$smarty = new NoRiskSmarty;
 $smarty->security = 1;
 $smarty->secure_dir=array("./");
 $smarty->compile_dir = "./smarty/template_c/";
