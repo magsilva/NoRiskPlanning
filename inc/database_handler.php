@@ -1,18 +1,23 @@
 <?php
-        require("./metabase/metabase_parser.php");
-        require("./metabase/metabase_manager.php");
-        require("./metabase/metabase_database.php");
-        require("./metabase/metabase_interface.php");
-        require("./metabase/metabase_lob.php");
-        require("./metabase/xml_parser.php");
+set_magic_quotes_runtime( 0 );
 
-	$erro=MetabaseSetupDatabaseObject(array(
+require("./metabase/metabase_parser.php");
+require("./metabase/metabase_interface.php");
+require("./metabase/metabase_database.php");
+require("./metabase/metabase_manager.php");
+require("./metabase/metabase_lob.php");
 
-            "Type"=>$cfg['db_type'],
-	    "Host"=>$cfg['server_db'],
-            "User"=>$cfg['user_db'],
-            "Password"=>$cfg['password_db']
+$erro = MetabaseSetupDatabaseObject(array(
+	"Type"=>$cfg['db_type'],
+	"Host"=>$cfg['server_db'],
+	"User"=>$cfg['user_db'],
+	"Password"=>$cfg['password_db']
+), $bd );
 
-	),$bd);
-	$bd->SetDatabase($cfg['bdname']);
+if($erro!="") {
+	echo "Database setup error: $error\n";
+	exit;
+}
+
+$bd->SetDatabase($cfg['bdname']);
 ?>

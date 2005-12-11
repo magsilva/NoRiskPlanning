@@ -7,8 +7,12 @@ $num_alerts = 0;
 
 if (isset($_REQUEST['submit']) && $_REQUEST['submit'] == "Login")
 {
+	ob_start();
+
 	$val_id = User_Validate_Simple_Field($_REQUEST['id'], 32);
 	$val_password = User_Validate_Password($_REQUEST['password'], 6);
+	$user_ok = 0;
+
 	if ($val_id && $val_password)
 	{
 		$auth_result = User_Authenticate_Password($_REQUEST['id'], $_REQUEST['password'], $bd);

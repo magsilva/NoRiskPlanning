@@ -51,7 +51,7 @@ function User_Validate_Password($content, $min_length)
 	if (empty($content))
 		return 0;
 	else{
-		if (strlen($content) < $milength)
+		if (strlen($content) < $min_length)
 			return -1;
 		else
 			return 1;
