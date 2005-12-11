@@ -6,21 +6,51 @@ if(!defined("METABASE_MANAGER_SQLITE_INCLUDED"))
 /*
  *	manager_sqlite.php
  *
- *	@(#) $Header: /cvsroot/phpsecurityadm/metabase/manager_sqlite.php,v 1.1.1.1 2003/02/27 20:55:26 koivi Exp $
+ *	@(#) $Header: /home/mlemos/cvsroot/metabase/manager_sqlite.php,v 1.8 2005/11/18 20:57:18 mlemos Exp $
  *	@author	Jeroen Derks <jeroen@derks.it>
+ *
+ *	Adapted for PHP Extensions by
+ *	John Walton admin@ryefc.com
+ *
+ *	Added inherited function to suppress PRIMARY KEY declaration for Autoincrement Field
+ *
  *
  */
 
 class metabase_manager_sqlite_class extends metabase_manager_database_class
 {
+// 5/11/05 J. Walton
+// Updated CreateDatabase function to test for file permissions on server
+// Set default SQLite permissions
 	Function CreateDatabase(&$db,$name)
 	{
+		if(!function_exists("sqlite_open"))
+			return($db->SetError("Connect","SQLite support is not available in this PHP configuration"));
 		$database_file=$db->GetDatabaseFile($name);
-		if (@file_exists($database_file))
+		if(@file_exists($database_file))
 			return($db->SetError("Create database","database already exists"));
-		$success=@touch($database_file);
-		if(!$success)
-			return($db->SetError("Create database",$php_errormsg));
+		@touch($database_file);
+		if(!@file_exists($database_file))
+			return($db->SetError("Create database","Unable to create new database. Permission denied"));
+		$mode=(IsSet($db->options["AccessMode"]) ? (strcmp($db->options["AccessMode"][0],"0") ? intval($db->options["AccessMode"]) : octdec($db->options["AccessMode"])) : 0640);
+		@chmod($database_file, $mode);
+		if(!is_readable($database_file))
+		{
+			@unlink($database_file);
+			return($db->SetError("Create database","Unable to open database for Reading. Permission denied"));
+		}
+		if(!is_writable($database_file))
+		{
+			@unlink($database_file);
+			return($db->SetError("Create database","Unable to open database for Writing. Permission denied"));
+		}
+		$handle=@sqlite_open($database_file, $mode);
+		if(!$handle)
+		{
+			@unlink($database_file);
+			return($db->SetError("Create database",IsSet($php_errormsg) ? $php_errormsg : "could not create the database file"));
+		}
+		sqlite_close($handle);
 		return(1);
 	}
 
@@ -31,21 +61,71 @@ class metabase_manager_sqlite_class extends metabase_manager_database_class
 			return($db->SetError("Drop database","database does not exist"));
 		$success=@unlink($database_file);
 		if(!$success)
-			return($db->SetError("Drop database",$php_errormsg));
+			return($db->SetError("Drop database",IsSet($php_errormsg) ? $php_errormsg : "could not remove the database file"));
 		return(1);
 	}
 
-	Function CreateTable(&$db,$name,&$fields)
+	Function AlterTable(&$db,$name,&$changes,$check)
 	{
-		if(!IsSet($name)
-		|| !strcmp($name,""))
-			return($db->SetError("Create table","it was not specified a valid table name"));
-		if(count($fields)==0)
-			return($db->SetError("Create table","it were not specified any fields for table \"$name\""));
-		$query_fields="";
-		if(!$this->GetFieldList($db,$fields,$query_fields))
-			return(0);
-		return($db->Query("CREATE TABLE $name ($query_fields)"));
+		$sql=array();
+		if(IsSet($changes["name"]))
+		{
+			$new_name=$changes["name"];
+			$sql[]="ALTER TABLE ".$name." RENAME TO ".$new_name;
+		}
+		else
+			$new_name=$name;
+		if(IsSet($changes["AddedFields"]))
+		{
+			$fields=$changes["AddedFields"];
+			for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
+			{
+				$field_name=Key($fields);
+				$definition=$fields[$field_name];
+				if(!$this->GetField($db,$definition,$field_name,$declaration))
+					return(0);
+				$sql[]="ALTER TABLE ".$new_name." ADD COLUMN ".$declaration;
+			}
+		}
+		$v=explode(".", $version=sqlite_libversion());
+		$version_number=$v[0]*1000000+$v[1]*1000+$v[2];
+		for($change=0,Reset($changes);$change<count($changes);Next($changes),$change++)
+		{
+			switch(Key($changes))
+			{
+				case "name":
+					if($version_number<3001000)
+						return($db->SetError("Alter table","table renaming is only supported in SQLite 3.1.0 and your version is ".$version));
+					break;
+				case "AddedFields":
+					if($version_number<3001000)
+						return($db->SetError("Alter table","table column adding is only supported in SQLite 3.2.0 and your version is ".$version));
+					break;
+				case "AutoIncrement":
+				case "PrimaryKey":
+				case "SQL":
+					break;
+				case "RenamedFields":
+				case "RemovedFields":
+				case "ChangedFields":
+				case "AddedPrimaryKey":
+				case "RemovedPrimaryKey":
+				case "ChangedPrimaryKey":
+				default:
+					return($db->SetError("Alter table","change type \"".Key($changes)."\" not yet supported"));
+			}
+		}
+		if(IsSet($changes["SQL"]))
+			$changes["SQL"]=$sql;
+		if(!$check)
+		{
+			for($statement=0;$statement<count($sql);$statement++)
+			{
+				if(!$db->Query($sql[$statement]))
+					return(0);
+			}
+		}
+		return(1);
 	}
 
 	Function ListTables(&$db,&$tables)
@@ -77,24 +157,26 @@ class metabase_manager_sqlite_class extends metabase_manager_database_class
 		}
 
 		$sql=$db->FetchResult($result,0,0);
-		$this->GetTableColumnNames($sql,$fields);
-
+		if(!$this->GetTableColumnNames($db,$sql,$fields))
+			return(0);
 		$db->FreeResult($result);
 		return(1);
 	}
 
-	Function GetTableColumnNames($sql,&$column_names)
+	Function GetTableColumnNames(&$db,$sql,&$column_names)
 	{
-		$this->GetTableColumns($sql,$columns);
+		if(!$this->GetTableColumns($db,$sql,$columns))
+			return(0);
 		$count=count($columns);
 		if($count==0)
-			return;
+			return($db->SetError("Get table column names","table did not return any columns"));
 		$column_names=array();
 		for($i=0;$i<$count;++$i)
 			$column_names[]=$columns[$i]["name"];
+		return(1);
 	}
 
-	Function GetTableColumns($sql,&$columns)
+	Function GetTableColumns(&$db,$sql,&$columns)
 	{
 		$start_pos=strpos($sql,"(");
 		$end_pos=strrpos($sql,")");
@@ -103,60 +185,39 @@ class metabase_manager_sqlite_class extends metabase_manager_database_class
 		$columns=array();
 		$count=count($column_sql);
 		if($count==0)
-			return;
+			return($db->SetError("Get table columns","unexpected empty table column definition list"));
 		for($i=0,$j=0;$i<$count;++$i)
 		{
-			$k=$i;
-			if (strstr($column_sql[$i],"("))
+			if(!preg_match('/^([^ ]+) (CHAR|VARCHAR|VARCHAR2|TEXT|INT|INTEGER|BIGINT|DOUBLE|FLOAT|DATETIME|DATE|TIME|LONGTEXT|LONGBLOB)( PRIMARY)?( \(([1-9][0-9]*)(,([1-9][0-9]*))?\))?( DEFAULT (\'[^\']*\'|[^ ]+))?( NOT NULL)?$/i',$column_sql[$i],$matches))
+				return($db->SetError("Get table columns","unexpected table column SQL definition"));
+			$columns[$j]["name"]=$matches[1];
+			$columns[$j]["type"]=strtolower($matches[2]);
+			if(IsSet($matches[5])
+			&& strlen($matches[5]))
+				$columns[$j]["length"]=$matches[5];
+			if(IsSet($matches[7])
+			&& strlen($matches[7]))
+				$columns[$j]["decimal"]=$matches[7];
+			if(IsSet($matches[9])
+			&& strlen($matches[9]))
 			{
-				while(!strstr($column_sql[$k],")"))
-				{
-					$column_sql[$i].=",".$column_sql[++$k];
-					UnSet($column_sql[$k]);
-				}
-			}
-			$lower=strtolower($column_sql[$i]);
-			$columns[$j]["name"]=strtok($lower," ");
-			$db_type=strtok("(), ");
-			if($db_type=="national")
-				$db_type=strtok("(), ");
-			if($db_type)
-				$columns[$j]["type"]=$db_type;
-			$length=strtok("(");
-			if(!is_numeric($length))
-				UnSet($length);
-			else
-				$columns[$j]["length"]=$db_type;
-			$decimal=strtok(",) ");
-			if($decimal)
-				$columns[$j]["decimal"]=$decimal;
-			if(($not_null_str=strstr($lower," not null ")))
-				$columns[$j]["notnull"]=1;
-			if(($not_null_str=strstr($lower," primary ")))
-				$columns[$j]["primary"]=1;
-			if(($not_null_str=strstr($lower," unique ")))
-				$columns[$j]["unique"]=1;
-			UnSet($default);
-			if(($default_pos=strpos($lower," default ")))
-			{
-				$default_str=trim(substr($column_sql[$i],$default_pos+9));
-				$first=$default_str[0];
-				if($first=="\""||$first=="\'")
-					$default=strtok(substr($default_str,1),$first);
-				else
-					$default=strtok($default_str," ");
+				$default=$matches[9];
+				if(strlen($default)
+				&& $default[0]=="'")
+					$default=str_replace("''","'",substr($default,1,strlen($default)-2));
 				$columns[$j]["default"]=$default;
 			}
+			if(IsSet($matches[10])
+			&& strlen($matches[10]))
+				$columns[$j]["notnull"]=1;
 			++$j;
-			$i=$k;
 		}
+		return(1);
 	}
 
 	Function GetTableFieldDefinition(&$db,$table,$field,&$definition)
 	{
 		$field_name=strtolower($field);
-		if($field_name==$db->dummy_primary_key)
-			return($db->SetError("Get table field definition",$db->dummy_primary_key." is an hidden column"));
 		if(!($result=$db->Query("SELECT sql FROM sqlite_master WHERE type='table' AND name='$table'")))
 			return(0);
 		if(!$db->GetColumnNames($result,$columns))
@@ -171,18 +232,14 @@ class metabase_manager_sqlite_class extends metabase_manager_database_class
 		}
 
 		$sql=$db->FetchResult($result,0,0);
-		$this->GetTableColumns($sql,$columns);
+		if(!$this->GetTableColumns($db,$sql,$columns))
+			return(0);
 		$count=count($columns);
 		for($i=0;$i<$count;++$i)
 		{
 			if($field_name==$columns[$i]["name"])
 			{
 				$db_type=$columns[$i]["type"];
-				$length=$columns[$i]["length"];
-				$decimal=$columns[$i]["decimal"];
-				$notnull=$columns[$i]["notnull"];
-				$default=$columns[$i]["default"];
-				
 				$type=array();
 				switch($db_type)
 				{
@@ -193,7 +250,7 @@ class metabase_manager_sqlite_class extends metabase_manager_database_class
 					case "integer":
 					case "bigint":
 						$type[0]="integer";
-						if($length=="1")
+						if(IsSet($columns[$i]["length"]) && $columns[$i]["length"]=="1")
 							$type[1]="boolean";
 						break;
 
@@ -203,10 +260,9 @@ class metabase_manager_sqlite_class extends metabase_manager_database_class
 					case "text":
 					case "char":
 					case "varchar":
+					case "varchar2":
 						$type[0]="text";
-						if($decimal=="binary")
-							$type[1]="blob";
-						elseif($length=="1")
+						if(IsSet($columns[$i]["length"]) && $columns[$i]["length"]=="1")
 							$type[1]="boolean";
 						elseif(strstr($db_type,"text"))
 							$type[1]="clob";
@@ -246,7 +302,7 @@ class metabase_manager_sqlite_class extends metabase_manager_database_class
 					case "mediumblob":
 					case "longblob":
 					case "blob":
-						$type[0]="blob";
+						$type[0]="text";
 						break;
 
 					case "year":
@@ -263,12 +319,12 @@ class metabase_manager_sqlite_class extends metabase_manager_database_class
 					$definition[$datatype]=array(
 						"type"=>$type[$datatype]
 					);
-					if(IsSet($notnull))
+					if(IsSet($columns[$i]["notnull"]))
 						$definition[$datatype]["notnull"]=1;
-					if(IsSet($default))
-						$definition[$datatype]["default"]=$default;
-					if(strlen($length))
-						$definition[$datatype]["length"]=$length;
+					if(IsSet($columns[$i]["default"]))
+						$definition[$datatype]["default"]=$columns[$i]["default"];
+					if(IsSet($columns[$i]["length"]))
+						$definition[$datatype]["length"]=$columns[$i]["length"];
 				}
 				$db->FreeResult($result);
 				return(1);
@@ -390,19 +446,19 @@ class metabase_manager_sqlite_class extends metabase_manager_database_class
 
 	Function CreateSequence(&$db,$name,$start)
 	{
-		if(!$db->Query("CREATE TABLE _sequence_$name (sequence INTEGER PRIMARY KEY DEFAULT 0 NOT NULL)"))
+		if(!$db->Query("CREATE TABLE ".$db->sequence_prefix.$name." (sequence INTEGER PRIMARY KEY DEFAULT 0 NOT NULL)"))
 			return(0);
-		if($db->Query("INSERT INTO _sequence_$name (sequence) VALUES (".($start-1).")"))
+		if($db->Query("INSERT INTO ".$db->sequence_prefix.$name." (sequence) VALUES (".($start-1).")"))
 			return(1);
 		$error=$db->Error();
-		if(!$db->Query("DROP TABLE _sequence_$name"))
+		if(!$db->Query("DROP TABLE ".$db->sequence_prefix.$name))
 			$db->warning="could not drop inconsistent sequence table";
 		return($db->SetError("Create sequence",$error));
 	}
 
 	Function DropSequence(&$db,$name)
 	{
-		return($db->Query("DROP TABLE _sequence_$name"));
+		return($db->Query("DROP TABLE ".$db->sequence_prefix.$name));
 	}
 
 	Function GetSequenceCurrentValue(&$db,$name,&$value)

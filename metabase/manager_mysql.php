@@ -1,4 +1,4 @@
-<?
+<?php
 if(!defined("METABASE_MANAGER_MYSQL_INCLUDED"))
 {
 	define("METABASE_MANAGER_MYSQL_INCLUDED",1);
@@ -6,7 +6,7 @@ if(!defined("METABASE_MANAGER_MYSQL_INCLUDED"))
 /*
  * manager_mysql.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/manager_mysql.php,v 1.1.1.1 2003/02/27 20:55:09 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/manager_mysql.php,v 1.14 2005/09/06 02:00:24 mlemos Exp $
  *
  */
 
@@ -20,13 +20,13 @@ class metabase_manager_mysql_class extends metabase_manager_database_class
 		{
 			case "BERKELEYDB":
 			case "BDB":
-				$check="have_bdb";
+				$check=array("have_bdb");
 				break;
 			case "INNODB":
-				$check="have_innobase";
+				$check=array("have_innodb","have_innobase");
 				break;
 			case "GEMINI":
-				$check="have_gemini";
+				$check=array("have_gemini");
 				break;
 			case "HEAP":
 			case "ISAM":
@@ -43,14 +43,45 @@ class metabase_manager_mysql_class extends metabase_manager_database_class
 		if(IsSet($this->verified_table_types[$table_type])
 		&& $this->verified_table_types[$table_type]==$db->connection)
 			return(1);
-		if(!$db->QueryAll("SHOW VARIABLES LIKE '$check'",$has))
-			return(0);
-		if(count($has)==0)
+		for($has_any=$type=0;$type<count($check);$type++)
+		{
+			$result=mysql_query("SHOW VARIABLES LIKE '".$check[$type]."'",$db->connection);
+			if(!$result)
+				return($db->SetError("Verify transactional table type",mysql_error($db->connection)));
+			$has=((mysql_num_rows($result) && !strcmp(strtolower(trim(mysql_result($result,0,1))),"yes")) ? 1 : 0);
+			mysql_free_result($result);
+			$has_any+=$has;
+			if($has)
+				break;
+		}
+		if(count($has_any)==0)
 			return($db->SetError("Verify transactional table","could not tell if ".$table_type." is a supported table type"));
-		if(strcmp($has[0][1],"YES"))
+		if(!$has)
 			return($db->SetError("Verify transactional table",$table_type." is not a supported table type by this MySQL database server"));
 		$this->verified_table_types[$table_type]=$db->connection;
 		return(1);
+	}
+
+	Function GetTableFieldsAndOptions(&$db,&$table,&$sql,&$options)
+	{
+		if(!$this->VerifyTransactionalTableType($db,$db->default_table_type))
+			return(0);
+		$options=(strlen($db->default_table_type) ? " TYPE=".$db->default_table_type : "");
+		if(!$this->GetFieldList($db,$table["FIELDS"],$sql))
+			return(0);
+		if(IsSet($table["PRIMARYKEY"]))
+		{
+			if(!$this->GetPrimaryKeyDeclaration($db,$table["PRIMARYKEY"],$key))
+				return(0);
+			$sql.=", ".$key;
+		}
+		else
+		{
+			if(IsSet($db->supported["Transactions"])
+			&& $db->default_table_type=="BDB")
+				$sql.=", ".$db->dummy_primary_key." INT NOT NULL AUTO_INCREMENT, PRIMARY KEY (".$db->dummy_primary_key.")";
+		}
+	  return(1);
 	}
 
 	Function CreateDatabase(&$db,$name)
@@ -58,7 +89,7 @@ class metabase_manager_mysql_class extends metabase_manager_database_class
 		if(!$db->Connect())
 			return(0);
 		if(function_exists("mysql_create_db"))
-			$success=mysql_create_db($name,$db->connection);
+			$success=@mysql_create_db($name,$db->connection);
 		else
 		{
 			$db->EscapeText($name);
@@ -74,7 +105,7 @@ class metabase_manager_mysql_class extends metabase_manager_database_class
 		if(!$db->Connect())
 			return(0);
 		if(function_exists("mysql_drop_db"))
-			$success=mysql_drop_db($name,$db->connection);
+			$success=@mysql_drop_db($name,$db->connection);
 		else
 		{
 			$db->EscapeText($name);
@@ -83,24 +114,6 @@ class metabase_manager_mysql_class extends metabase_manager_database_class
 		if(!$success)
 			return($db->SetError("Drop database",mysql_error($db->connection)));
 		return(1);
-	}
-
-	Function CreateTable(&$db,$name,&$fields)
-	{
-		if(!IsSet($name)
-		|| !strcmp($name,""))
-			return($db->SetError("Create table","it was not specified a valid table name"));
-		if(count($fields)==0)
-			return($db->SetError("Create table","it were not specified any fields for table \"$name\""));
-		if(!$this->VerifyTransactionalTableType($db,$db->default_table_type))
-			return(0);
-		$query_fields="";
-		if(!$this->GetFieldList($db,$fields,$query_fields))
-			return(0);
-		if(IsSet($db->supported["Transactions"])
-		&& $db->default_table_type=="BDB")
-			$query_fields.=", ".$db->dummy_primary_key." INT NOT NULL AUTO_INCREMENT, PRIMARY KEY (".$db->dummy_primary_key.")";
-		return($db->Query("CREATE TABLE $name ($query_fields)".(strlen($db->default_table_type) ? " TYPE=".$db->default_table_type : "")));
 	}
 
 	Function AlterTable(&$db,$name,&$changes,$check)
@@ -116,72 +129,106 @@ class metabase_manager_mysql_class extends metabase_manager_database_class
 					case "ChangedFields":
 					case "RenamedFields":
 					case "name":
+					case "AddedPrimaryKey":
+					case "RemovedPrimaryKey":
+					case "ChangedPrimaryKey":
+					case "PrimaryKey":
+					case "AutoIncrement":
 						break;
 					default:
 						return($db->SetError("Alter table","change type \"".Key($changes)."\" not yet supported"));
 				}
 			}
-			return(1);
 		}
-		else
+		$query=(IsSet($changes["name"]) ? "RENAME AS ".$changes["name"] : "");
+		if(IsSet($changes["AddedFields"]))
 		{
-			$query=(IsSet($changes["name"]) ? "RENAME AS ".$changes["name"] : "");
-			if(IsSet($changes["AddedFields"]))
+			$fields=$changes["AddedFields"];
+			for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
 			{
-				$fields=$changes["AddedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-				{
-					if(strcmp($query,""))
-						$query.=", ";
-					$query.="ADD ".$fields[Key($fields)]["Declaration"];
-				}
+				if(strcmp($query,""))
+					$query.=", ";
+				$query.="ADD ".$fields[Key($fields)]["Declaration"];
 			}
-			if(IsSet($changes["RemovedFields"]))
-			{
-				$fields=$changes["RemovedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-				{
-					if(strcmp($query,""))
-						$query.=", ";
-					$query.="DROP ".Key($fields);
-				}
-			}
-			$renamed_fields=array();
-			if(IsSet($changes["RenamedFields"]))
-			{
-				$fields=$changes["RenamedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-					$renamed_fields[$fields[Key($fields)]["name"]]=Key($fields);
-			}
-			if(IsSet($changes["ChangedFields"]))
-			{
-				$fields=$changes["ChangedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-				{
-					if(strcmp($query,""))
-						$query.=", ";
-					if(IsSet($renamed_fields[Key($fields)]))
-					{
-						$field_name=$renamed_fields[Key($fields)];
-						UnSet($renamed_fields[Key($fields)]);
-					}
-					else
-						$field_name=Key($fields);
-					$query.="CHANGE $field_name ".$fields[Key($fields)]["Declaration"];
-				}
-			}
-			if(count($renamed_fields))
-			{
-				for($field=0,Reset($renamed_fields);$field<count($renamed_fields);Next($renamed_fields),$field++)
-				{
-					if(strcmp($query,""))
-						$query.=", ";
-					$old_field_name=$renamed_fields[Key($renamed_fields)];
-					$query.="CHANGE $old_field_name ".$changes["RenamedFields"][$old_field_name]["Declaration"];
-				}
-			}
-			return($db->Query("ALTER TABLE $name $query"));
 		}
+		if(IsSet($changes["RemovedFields"]))
+		{
+			$fields=$changes["RemovedFields"];
+			for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
+			{
+				if(strcmp($query,""))
+					$query.=", ";
+				$query.="DROP ".Key($fields);
+			}
+		}
+		$renamed_fields=array();
+		if(IsSet($changes["RenamedFields"]))
+		{
+			$fields=$changes["RenamedFields"];
+			for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
+				$renamed_fields[$fields[Key($fields)]["name"]]=Key($fields);
+		}
+		if(IsSet($changes["ChangedFields"]))
+		{
+			$fields=$changes["ChangedFields"];
+			for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
+			{
+				if(strcmp($query,""))
+					$query.=", ";
+				if(IsSet($renamed_fields[Key($fields)]))
+				{
+					$field_name=$renamed_fields[Key($fields)];
+					UnSet($renamed_fields[Key($fields)]);
+				}
+				else
+					$field_name=Key($fields);
+				$query.="CHANGE $field_name ".$fields[Key($fields)]["Declaration"];
+			}
+		}
+		if(count($renamed_fields))
+		{
+			for($field=0,Reset($renamed_fields);$field<count($renamed_fields);Next($renamed_fields),$field++)
+			{
+				if(strcmp($query,""))
+					$query.=", ";
+				$old_field_name=$renamed_fields[Key($renamed_fields)];
+				$query.="CHANGE $old_field_name ".$changes["RenamedFields"][$old_field_name]["Declaration"];
+			}
+		}
+		$remove_primary_key=0;
+		$primary_key_fields=array();
+		if(IsSet($changes["RemovedPrimaryKey"]))
+			$remove_primary_key=1;
+		if(IsSet($changes["AddedPrimaryKey"]))
+			$primary_key_fields=$changes["AddedPrimaryKey"]["FIELDS"];
+		if(IsSet($changes["ChangedPrimaryKey"]))
+		{
+			$remove_primary_key=1;
+			$primary_key_fields=$changes["ChangedPrimaryKey"]["FIELDS"];
+		}
+		if($remove_primary_key)
+		{
+			if(strcmp($query,""))
+				$query.=", ";
+			$query.="DROP PRIMARY KEY";
+		}
+		if(count($primary_key_fields))
+		{
+			if(strcmp($query,""))
+				$query.=", ";
+			$query.="ADD PRIMARY KEY (";
+			for($field=0,Reset($primary_key_fields);$field<count($primary_key_fields);Next($primary_key_fields),$field++)
+			{
+				if($field>0)
+					$query.=", ";
+				$query.=Key($primary_key_fields);
+			}
+			$query.=")";
+		}
+		$query="ALTER TABLE $name $query";
+		if(IsSet($changes["SQL"]))
+			$changes["SQL"]=array($query);
+		return($check ? 1 : $db->Query($query));
 	}
 
 	Function ListTables(&$db,&$tables)
@@ -344,6 +391,10 @@ class metabase_manager_mysql_class extends metabase_manager_database_class
 					$definition[$datatype]=array(
 						"type"=>$type[$datatype]
 					);
+					if(!strcmp($type[$datatype],"integer")
+					&& IsSet($columns["extra"])
+					&& !strcmp($row[$columns["extra"]],"auto_increment"))
+						$definition[$datatype]["autoincrement"]=1;
 					if(IsSet($notnull))
 						$definition[$datatype]["notnull"]=1;
 					if(IsSet($default))
@@ -357,6 +408,80 @@ class metabase_manager_mysql_class extends metabase_manager_database_class
 		}
 		$db->FreeResult($result);
 		return($db->SetError("Get table field definition","it was not specified an existing table column"));
+	}
+
+	Function ListTableKeys(&$db, $table, $primary, &$keys)
+	{
+		if(!$primary)
+			return($db->SetError("List table keys","list table non-primary keys is not yet supported"));
+		if(!($result=$db->Query("SHOW INDEX FROM $table")))
+			return(0);
+		if(!$db->GetColumnNames($result,$columns))
+		{
+			$db->FreeResult($result);
+			return(0);
+		}
+		if(!IsSet($columns[$field="key_name"]))
+		{
+			$db->FreeResult($result);
+			return($db->SetError("List table keys","show index does not return the table index names"));
+		}
+		$key_name_column=$columns["key_name"];
+		for($found=$keys=array(),$key=0;!$db->EndOfResult($result);$keys++)
+		{
+			$key_name=$db->FetchResult($result,$key,$key_name_column);
+			if(!strcmp($key_name,"PRIMARY"))
+			{
+				$keys[]=$key_name;
+				break;
+			}
+		}
+		$db->FreeResult($result);
+		return(1);
+	}
+
+	Function GetTableKeyDefinition(&$db, $table, $key, $primary, &$definition)
+	{
+		if(!$primary)
+			return($db->SetError("Get table key definition","get table non-primary key definition is not yet supported"));
+		$key_name=strtolower($key);
+		if($key_name!="primary")
+			return($db->SetError("Get table key definition",$key." is not the table primary key name"));
+		if(!($result=$db->Query("SHOW INDEX FROM ".$table)))
+			return(0);
+		if(!$db->GetColumnNames($result,$columns))
+		{
+			$db->FreeResult($result);
+			return(0);
+		}
+		if(!IsSet($columns[$column="key_name"])
+		|| !IsSet($columns[$column="column_name"])
+		|| !IsSet($columns[$column="collation"]))
+		{
+			$db->FreeResult($result);
+			return($db->SetError("Get table key definition","show index does not return the column $column"));
+		}
+		$key_name_column=$columns["key_name"];
+		$column_name_column=$columns["column_name"];
+		$collation_column=$columns["collation"];
+		$definition=array();
+		for($key_row=0;!$db->EndOfResult($result);$key_row++)
+		{
+			if(!$db->FetchResultArray($result,$row,$key_row))
+			{
+				$db->FreeResult($result);
+				return(0);
+			}
+			if(!strcmp($key_name,strtolower($row[$key_name_column])))
+			{
+				$column_name=$row[$column_name_column];
+				$definition["FIELDS"][$column_name]=array();
+				if(IsSet($row[$collation_column]))
+					$definition['FIELDS'][$column_name]['sorting']=($row[$collation_column]=="A" ? "ascending" : "descending");
+			}
+		}
+		$db->FreeResult($result);
+		return(IsSet($definition["FIELDS"]) ? 1 : $db->SetError("Get table key definition","it was not specified an existing table key"));
 	}
 
 	Function ListTableIndexes(&$db,$table,&$indexes)
@@ -391,8 +516,8 @@ class metabase_manager_mysql_class extends metabase_manager_database_class
 	Function GetTableIndexDefinition(&$db,$table,$index,&$definition)
 	{
 		$index_name=strtolower($index);
-		if($index_name=="PRIMARY")
-			return($db->SetError("Get table index definition","PRIMARY is an hidden index"));
+		if($index_name=="primary")
+			return($db->SetError("Get table index definition",$index." is an hidden index"));
 		if(!($result=$db->Query("SHOW INDEX FROM $table")))
 			return(0);
 		if(!$db->GetColumnNames($result,$columns))
@@ -421,7 +546,7 @@ class metabase_manager_mysql_class extends metabase_manager_database_class
 				return(0);
 			}
 			$key_name=$row[$key_name_column];
-			if(!strcmp($index_name,$key_name))
+			if(!strcmp($index,$key_name))
 			{
 				if(!$row[$non_unique_column])
 					$definition["unique"]=1;
@@ -471,7 +596,7 @@ class metabase_manager_mysql_class extends metabase_manager_database_class
 	{
 		if(!$this->VerifyTransactionalTableType($db,$db->default_table_type))
 			return(0);
-		if(!$db->Query("CREATE TABLE _sequence_$name (sequence INT DEFAULT 0 NOT NULL AUTO_INCREMENT, PRIMARY KEY (sequence))".(strlen($db->default_table_type) ? " TYPE=".$db->default_table_type : "")))
+		if(!$db->Query("CREATE TABLE _sequence_$name (sequence INT NOT NULL AUTO_INCREMENT, PRIMARY KEY (sequence))".(strlen($db->default_table_type) ? " TYPE=".$db->default_table_type : "")))
 			return(0);
 		if($start==1
 		|| $db->Query("INSERT INTO _sequence_$name (sequence) VALUES (".($start-1).")"))

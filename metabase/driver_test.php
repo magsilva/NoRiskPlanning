@@ -1,8 +1,8 @@
-<?
+<?php
 /*
  * driver_test.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/driver_test.php,v 1.1.1.1 2003/02/27 20:55:09 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/driver_test.php,v 1.41 2005/11/18 12:52:46 mlemos Exp $
  *
  * This is a script intended to be used by Metabase DBMS driver class
  * developers or other users to verify if the implementation of a given
@@ -61,8 +61,8 @@ Function InsertTestValues($database,$prepared_query,&$data)
 	);
 
 	$database_variables=array(
-		"create"=>"0",
-		"name"=>"test"
+		"create"=>"1",
+		"name"=>"driver_test"
 	);
 
 	if(file_exists("driver_test_config.php"))
@@ -84,7 +84,9 @@ Function InsertTestValues($database,$prepared_query,&$data)
 		"replace"=>1,
 		"lobstorage"=>1,
 		"lobfiles"=>1,
-		"lobnulls"=>1
+		"lobnulls"=>1,
+		"autoincrement"=>1,
+		"preparedautoincrement"=>1
 	);
 	if($argc<=1)
 		$tests=$default_tests;
@@ -114,6 +116,7 @@ Function InsertTestValues($database,$prepared_query,&$data)
 	if($manager->database
 	&& IsSet($driver_arguments["CaptureDebug"]))
 		$debug_output.=MetabaseDebugOutput($manager->database);
+	$manager->CloseSetup();
 	$passed=$failed=0;
 	if($success)
 	{
@@ -953,7 +956,9 @@ Function InsertTestValues($database,$prepared_query,&$data)
 									$success=0;
 								else
 								{
-									if(VerifyFetchedValues($database,$result,0,$data,$value,$field))
+									$verify=VerifyFetchedValues($database,$result,0,$data,$value,$field);
+									MetabaseFreeResult($database,$result);
+									if($verify)
 									{
 										$pass=0;
 										echo "FAILED!$eol";
@@ -1248,6 +1253,271 @@ Function InsertTestValues($database,$prepared_query,&$data)
 					echo "Transactions are not supported.$eol";
 			}
 
+			$support_auto_increment=MetabaseSupport($database,"AutoIncrement");
+			if((IsSet($tests["autoincrement"])
+			|| IsSet($tests["preparedautoincrement"]))
+			&& $success)
+			{
+				if($support_auto_increment)
+				{
+					if(IsSet($driver_arguments["CaptureDebug"]))
+						$debug_output.=MetabaseDebugOutput($database);
+					$input_file="autoincrement.schema";
+					if(!($success=$manager->UpdateDatabase($input_file,$input_file.".before",$driver_arguments,$database_variables)))
+						$error=$manager->error;
+					if(count($manager->warnings)>0)
+						$debug_output.="WARNING:$eol".implode($manager->warnings,"!$eol").$eol;
+					if($manager->database
+					&& IsSet($driver_arguments["CaptureDebug"]))
+						$debug_output.=MetabaseDebugOutput($manager->database);
+					$manager->CloseSetup();
+					if($success)
+					{
+						MetabaseCloseSetup($database);
+						$database=0;
+						if(($success=(strlen($error=MetabaseSetupDatabase($driver_arguments,$database))==0)))
+						{
+							MetabaseSetDatabase($database,$database_variables["name"]);
+							if(IsSet($driver_arguments["CaptureDebug"]))
+								MetabaseCaptureDebugOutput($database,1);
+						}
+					}
+				}
+				else
+					echo "Autoincrement fields are not supported.$eol";
+			}
+
+			if($support_auto_increment
+			&& IsSet($tests["autoincrement"])
+			&& $success)
+			{
+				$test="autoincrement";
+				echo "Testing autoincrement fields... ";
+				flush();
+				$pass=1;
+				$table="articles";
+				if(!MetabaseQuery($database,"DELETE FROM $table"))
+					$success=0;
+				else
+				{
+					$title="Some 'title'";
+					$body="NULL";
+					$author=1000;
+					$score=.25E-4;
+					$omit=MetabaseSupport($database,"OmitInsertKey");
+					if(($omit
+					|| MetabaseGetNextKey($database, $table, $key))
+					&& MetabaseQuery($database, "INSERT INTO $table (".($omit ? "" : "id, ")."title, body, author, score) VALUES(".($omit ? "" : $key.", ").MetabaseGetTextFieldValue($database,$title." - 0").", NULL, ".$author.", ".MetabaseGetFloatFieldValue($database,$score).")")
+					&& MetabaseGetInsertedKey($database,$table,$start_id))
+					{
+						$rows=3;
+						for($id=$start_id+1;$id<$start_id+$rows;$id++)
+						{
+							if(($omit
+							|| MetabaseGetNextKey($database, $table, $key))
+							&& MetabaseQuery($database, "INSERT INTO $table (".($omit ? "" : "id, ")."title, body, author, score) VALUES(".($omit ? "" : $key.", ").MetabaseGetTextFieldValue($database,$title." - ".strval($id-$start_id)).", NULL, ".($author+$id-$start_id).", ".MetabaseGetFloatFieldValue($database, $score*pow(10,$id-$start_id)).")")
+							&& MetabaseGetInsertedKey($database,$table,$inserted_id))
+							{
+								if($inserted_id!=$id)
+								{
+									$pass=0;
+									echo "FAILED!$eol";
+									$failed++;
+									echo "Test $test: inserted autoincrement key is $inserted_id and not $id as expected$eol";
+									break;
+								}
+							}
+							else
+							{
+								$success=0;
+								break;
+							}
+						}
+						if($success
+						&& $pass)
+						{
+							$types=array("integer","text");
+							if(MetabaseQueryAll($database, "SELECT id, title, body, author, score FROM $table ORDER BY id",$records,$types))
+							{
+								for($record=0;$record<$rows;$record++)
+								{
+									if($records[$record][0]!=$start_id+$record)
+									{
+										$pass=0;
+										echo "FAILED!$eol";
+										$failed++;
+										echo "Test $test: retrieved autoincrement key is ".$records[$record][0]." and not ".strval($start_id+$record)." as expected$eol";
+										break;
+									}
+									if(strcmp($records[$record][1],$title." - ".$record))
+									{
+										$pass=0;
+										echo "FAILED!$eol";
+										$failed++;
+										echo "Test $test: retrieved autoincrement key record field is \"".$records[$record][1]."\" and not \"".($title." - ".$record)."\" as expected$eol";
+										break;
+									}
+									if(IsSet($records[$record][2]))
+									{
+										$pass=0;
+										echo "FAILED!$eol";
+										$failed++;
+										echo "Test $test: retrieved autoincrement key record field is \"".$records[$record][2]."\" and not NULL as expected$eol";
+										break;
+									}
+									if($records[$record][3]!=$author+$record)
+									{
+										$pass=0;
+										echo "FAILED!$eol";
+										$failed++;
+										echo "Test $test: retrieved autoincrement key record field is ".$records[$record][3]." and not ".($author+$record)." as expected$eol";
+										break;
+									}
+									if($records[$record][4]!=$score*pow(10,$record))
+									{
+										$pass=0;
+										echo "FAILED!$eol";
+										$failed++;
+										echo "Test $test: retrieved autoincrement key record field is ".$records[$record][4]." and not ".($score*pow(10,$record))." as expected$eol";
+										break;
+									}
+								}
+							}
+							else
+								$success=0;
+						}
+					}
+					else
+						$success=0;
+				}
+				if($success
+				&& $pass)
+				{
+					$passed++;
+					echo "OK.$eol";
+				}
+			}
+
+			if($support_auto_increment
+			&& IsSet($tests["preparedautoincrement"])
+			&& $success)
+			{
+				$test="preparedautoincrement";
+				echo "Testing autoincrement fields with prepared queries... ";
+				flush();
+				$pass=1;
+				$table="articles";
+				$omit=(MetabaseSupport($database,"OmitInsertKey") ? 1 : 0);
+				if(!MetabaseQuery($database,"DELETE FROM $table")
+				|| !($prepared_query=MetabasePrepareQuery($database, "INSERT INTO $table (".($omit ? "" : "id, ")."title, body, author, score) VALUES(".($omit ? "" : "?, ")."?, ?, ?, ?)")))
+					$success=0;
+				else
+				{
+					$title="Some 'title'";
+					$author=1000;
+					$score=.25E-4;
+					MetabaseQuerySetText($database, $prepared_query, 2-$omit, $title." - 0");
+					MetabaseQuerySetNull($database, $prepared_query, 3-$omit, "text");
+					MetabaseQuerySetInteger($database, $prepared_query, 4-$omit, $author);
+					MetabaseQuerySetFloat($database, $prepared_query, 5-$omit, $score);
+					if(($omit
+					|| MetabaseQuerySetKey($database, $prepared_query, 1, $table))
+					&& MetabaseExecuteQuery($database, $prepared_query)
+					&& MetabaseGetInsertedKey($database,$table,$start_id))
+					{
+						$rows=3;
+						for($id=$start_id+1;$id<$start_id+$rows;$id++)
+						{
+							MetabaseQuerySetText($database, $prepared_query, 2-$omit, $title." - ".strval($id-$start_id));
+							MetabaseQuerySetNull($database, $prepared_query, 3-$omit, "text");
+							MetabaseQuerySetInteger($database, $prepared_query, 4-$omit, $author+$id-$start_id);
+							MetabaseQuerySetFloat($database, $prepared_query, 5-$omit, $score*pow(10,$id-$start_id));
+							if(($omit
+							|| MetabaseQuerySetKey($database, $prepared_query, 1, $table))
+							&& MetabaseExecuteQuery($database, $prepared_query)
+							&& MetabaseGetInsertedKey($database,$table,$inserted_id))
+							{
+								if($inserted_id!=$id)
+								{
+									$pass=0;
+									echo "FAILED!$eol";
+									$failed++;
+									echo "Test $test: inserted autoincrement key is $inserted_id and not $id as expected$eol";
+									break;
+								}
+							}
+							else
+							{
+								$success=0;
+								break;
+							}
+						}
+						if($success
+						&& $pass)
+						{
+							$types=array("integer", "text", "text", "integer", "float");
+							if(MetabaseQueryAll($database, "SELECT id, title, body, author, score FROM $table ORDER BY id",$records,$types))
+							{
+								for($record=0;$record<$rows;$record++)
+								{
+									if($records[$record][0]!=$start_id+$record)
+									{
+										$pass=0;
+										echo "FAILED!$eol";
+										$failed++;
+										echo "Test $test: retrieved autoincrement key is ".$records[$record][0]." and not ".strval($start_id+$record)." as expected$eol";
+										break;
+									}
+									if(strcmp($records[$record][1],$title." - ".$record))
+									{
+										$pass=0;
+										echo "FAILED!$eol";
+										$failed++;
+										echo "Test $test: retrieved autoincrement key record field is \"".$records[$record][1]."\" and not \"".($title." - ".$record)."\" as expected$eol";
+										break;
+									}
+									if(IsSet($records[$record][2]))
+									{
+										$pass=0;
+										echo "FAILED!$eol";
+										$failed++;
+										echo "Test $test: retrieved autoincrement key record field is \"".$records[$record][2]."\" and not NULL as expected$eol";
+										break;
+									}
+									if($records[$record][3]!=$author+$record)
+									{
+										$pass=0;
+										echo "FAILED!$eol";
+										$failed++;
+										echo "Test $test: retrieved autoincrement key record field is ".$records[$record][3]." and not ".($author+$record)." as expected$eol";
+										break;
+									}
+									if($records[$record][4]!=$score*pow(10,$record))
+									{
+										$pass=0;
+										echo "FAILED!$eol";
+										$failed++;
+										echo "Test $test: retrieved autoincrement key record field is ".$records[$record][4]." and not ".($score*pow(10,$record))." as expected$eol";
+										break;
+									}
+								}
+							}
+							else
+								$success=0;
+						}
+					}
+					else
+						$success=0;
+					MetabaseFreePreparedQuery($database, $prepared_query);
+				}
+				if($success
+				&& $pass)
+				{
+					$passed++;
+					echo "OK.$eol";
+				}
+			}
+
 			$support_lobs=MetabaseSupport($database,"LOBs");
 			if((IsSet($tests["lobstorage"])
 			|| IsSet($tests["lobfiles"])
@@ -1256,15 +1526,28 @@ Function InsertTestValues($database,$prepared_query,&$data)
 			{
 				if($support_lobs)
 				{
+					if(IsSet($driver_arguments["CaptureDebug"]))
+						$debug_output.=MetabaseDebugOutput($database);
 					$input_file="lob_test.schema";
 					if(!($success=$manager->UpdateDatabase($input_file,$input_file.".before",$driver_arguments,$database_variables)))
 						$error=$manager->error;
-					$debug_output="";
 					if(count($manager->warnings)>0)
 						$debug_output.="WARNING:$eol".implode($manager->warnings,"!$eol").$eol;
 					if($manager->database
 					&& IsSet($driver_arguments["CaptureDebug"]))
 						$debug_output.=MetabaseDebugOutput($manager->database);
+					$manager->CloseSetup();
+					if($success)
+					{
+						MetabaseCloseSetup($database);
+						$database=0;
+						if(($success=(strlen($error=MetabaseSetupDatabase($driver_arguments,$database))==0)))
+						{
+							MetabaseSetDatabase($database,$database_variables["name"]);
+							if(IsSet($driver_arguments["CaptureDebug"]))
+								MetabaseCaptureDebugOutput($database,1);
+						}
+					}
 				}
 				else
 					echo "LOBs are not supported.$eol";
@@ -1423,7 +1706,8 @@ Function InsertTestValues($database,$prepared_query,&$data)
 								"Type"=>"inputfile",
 								"Database"=>$database,
 								"Error"=>"",
-								"FileName"=>$character_data_file
+								"FileName"=>$character_data_file,
+								"BufferLength"=>32
 							);
 							$success=(fwrite($file,$character_data,strlen($character_data))==strlen($character_data));
 							fclose($file);
@@ -1438,7 +1722,8 @@ Function InsertTestValues($database,$prepared_query,&$data)
 										"Type"=>"inputfile",
 										"Database"=>$database,
 										"Error"=>"",
-										"FileName"=>$binary_data_file
+										"FileName"=>$binary_data_file,
+										"BufferLength"=>32
 									);
 									$success=(fwrite($file,$binary_data,strlen($binary_data))==strlen($binary_data));
 									fclose($file);
@@ -1489,7 +1774,8 @@ Function InsertTestValues($database,$prepared_query,&$data)
 										"Field"=>"document",
 										"Binary"=>0,
 										"Error"=>"",
-										"FileName"=>$character_data_file
+										"FileName"=>$character_data_file,
+										"BufferLength"=>32
 									);
 									if(($success=MetabaseCreateLOB($character_lob,$clob)))
 									{
@@ -1535,7 +1821,8 @@ Function InsertTestValues($database,$prepared_query,&$data)
 													"Field"=>"picture",
 													"Binary"=>1,
 													"Error"=>"",
-													"FileName"=>$binary_data_file
+													"FileName"=>$binary_data_file,
+													"BufferLength"=>32
 												);
 												if(($success=MetabaseCreateLOB($binary_lob,$blob)))
 												{

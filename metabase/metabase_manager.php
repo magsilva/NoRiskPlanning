@@ -1,8 +1,8 @@
-<?
+<?php
 /*
  * metabase_manager.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/metabase_manager.php,v 1.1.1.1 2003/02/27 20:55:33 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/metabase_manager.php,v 1.87 2005/11/17 21:25:37 mlemos Exp $
  *
  */
 
@@ -20,9 +20,12 @@ class metabase_manager_class
 
 	Function SetupDatabase(&$arguments)
 	{
+		if(IsSet($arguments["Connection"])
+		&& strlen($error=MetabaseParseConnectionArguments($arguments["Connection"],$arguments)))
+			return($error);
 		if(IsSet($arguments["Debug"]))
 			$this->debug=$arguments["Debug"];
-		if(strcmp($error=MetabaseSetupDatabase($arguments,$this->database),""))
+		if(strlen($error=MetabaseSetupDatabase($arguments,$this->database)))
 			return($error);
 		if(!IsSet($arguments["Debug"]))
 			MetabaseCaptureDebugOutput($this->database,1);
@@ -32,7 +35,10 @@ class metabase_manager_class
 	Function CloseSetup()
 	{
 		if($this->database!=0)
+		{
 			MetabaseCloseSetup($this->database);
+			$this->database=0;
+		}
 	}
 
 	Function GetField(&$field,$field_name,$declaration,&$query)
@@ -126,14 +132,16 @@ class metabase_manager_class
 		return($this->GetFieldList($this->database_definition["TABLES"][$table]["FIELDS"],0,$fields));
 	}
 
-	Function CreateTable($table_name,$table)
+	Function CreateTable($table_name,$table,$check)
 	{
-		MetabaseDebug($this->database,"Create table: ".$table_name);
-		if(!MetabaseCreateTable($this->database,$table_name,$table["FIELDS"]))
+		if(!$check)
+			MetabaseDebug($this->database,"Create table: ".$table_name);
+		if(!MetabaseCreateDetailedTable($this->database,$table,$check))
 			return(MetabaseError($this->database));
 		$success=1;
 		$error="";
-		if(IsSet($table["initialization"]))
+		if(!$check
+		&& IsSet($table["initialization"]))
 		{
 			$instructions=$table["initialization"];
 			for(Reset($instructions),$instruction=0;$success && $instruction<count($instructions);$instruction++,Next($instructions))
@@ -248,28 +256,32 @@ class metabase_manager_class
 		{
 			if(!MetabaseSupport($this->database,"Indexes"))
 				return("indexes are not supported");
-			$indexes=$table["INDEXES"];
-			for($index=0,Reset($indexes);$index<count($indexes);Next($indexes),$index++)
+			if(!$check)
 			{
-				if(!MetabaseCreateIndex($this->database,$table_name,Key($indexes),$indexes[Key($indexes)]))
+				$indexes=$table["INDEXES"];
+				for($index=0,Reset($indexes);$index<count($indexes);Next($indexes),$index++)
 				{
-					$error=MetabaseError($this->database);
-					$success=0;
-					break;
+					if(!MetabaseCreateIndex($this->database,$table_name,Key($indexes),$indexes[Key($indexes)]))
+					{
+						$error=MetabaseError($this->database);
+						$success=0;
+						break;
+					}
 				}
 			}
 		}
-		if(!$success)
+		if(!$success
+		&& !$check)
 		{
-			if(!MetabaseDropTable($this->database,$table_name))
-				$error="could not initialize the table \"$table_name\" ($error) and then could not drop the table (".MetabaseError($this->database).")"; 
+			if(strlen($drop_error=$this->DropTable($this->database,$table,0)))
+				$error="could not initialize the table \"".$table_name."\" (".$error.") and then could not drop the table (".$drop_error.")";
 		}
 		return($error);
 	}
 
-	Function DropTable($table_name)
+	Function DropTable($table,$check)
 	{
-		return(MetabaseDropTable($this->database,$table_name) ? "" : MetabaseError($this->database));
+		return(MetabaseDropDetailedTable($this->database,$table,$check) ? "" : MetabaseError($this->database));
 	}
 
 	Function CreateSequence($sequence_name,$sequence,$created_on_table)
@@ -316,6 +328,15 @@ class metabase_manager_class
 		if(!IsSet($this->database_definition["name"])
 		|| !strcmp($this->database_definition["name"],""))
 			return("it was not specified a valid database name");
+		for(Reset($this->database_definition["TABLES"]),$table=0;$table<count($this->database_definition["TABLES"]);Next($this->database_definition["TABLES"]),$table++)
+		{
+			$table_name=Key($this->database_definition["TABLES"]);
+			if(strcmp($error=$this->CreateTable($table_name,$this->database_definition["TABLES"][$table_name],1),""))
+				return("database driver is not able to perform the database instalation: ".$error);
+		}
+		if(IsSet($this->database_definition["SEQUENCES"])
+		&& !MetabaseSupport($this->database,"Sequences"))
+			return("database driver is not able to perform the database instalation: sequences are not supported");
 		$create=(IsSet($this->database_definition["create"]) && $this->database_definition["create"]);
 		if($create)
 		{
@@ -335,7 +356,7 @@ class metabase_manager_class
 		for($error="",Reset($this->database_definition["TABLES"]),$table=0;$table<count($this->database_definition["TABLES"]);Next($this->database_definition["TABLES"]),$table++)
 		{
 			$table_name=Key($this->database_definition["TABLES"]);
-			if(strcmp($error=$this->CreateTable($table_name,$this->database_definition["TABLES"][$table_name]),""))
+			if(strcmp($error=$this->CreateTable($table_name,$this->database_definition["TABLES"][$table_name],0),""))
 				break;
 			$created_objects++;
 		}
@@ -412,6 +433,7 @@ class metabase_manager_class
 				$was_table_name=$table_name;
 			if(IsSet($previous_definition["TABLES"][$was_table_name]))
 			{
+				$information=array();
 				if(strcmp($was_table_name,$table_name))
 				{
 					$this->AddDefinitionChange($changes,"TABLES",$was_table_name,array("name"=>$table_name));
@@ -460,6 +482,15 @@ class metabase_manager_class
 										$change["unsigned"]=$unsigned;
 										MetabaseDebug($this->database,"Changed field '$field_name' type from '".($previous_unsigned ? "unsigned " : "").$previous_fields[$was_field_name]["type"]."' to '".($unsigned ? "unsigned " : "").$fields[$field_name]["type"]."' in table '$table_name'");
 									}
+									if(($previous_auto_increment=IsSet($previous_fields[$was_field_name]["autoincrement"])))
+										$this->AddDefinitionChange($information,"TABLES",$was_table_name,array("AutoIncrement"=>array("was"=>$was_field_name)));
+									if(($auto_increment=IsSet($fields[$field_name]["autoincrement"])))
+										$this->AddDefinitionChange($information,"TABLES",$was_table_name,array("AutoIncrement"=>array("field"=>$field_name)));
+									if(strcmp($previous_auto_increment,$auto_increment))
+									{
+										$change["autoincrement"]=$auto_increment;
+										MetabaseDebug($this->database,"Changed field '$field_name' from '".($previous_auto_increment ? "" : "no ")."autoincrement' to '".($auto_increment ? "" : "no ")."autoincrement' in table '$table_name'");
+									}
 									break;
 								case "text":
 								case "clob":
@@ -483,8 +514,8 @@ class metabase_manager_class
 									return("type \"".$fields[$field_name]["type"]."\" is not yet supported");
 							}
 
-							$previous_notnull=IsSet($previous_fields[$was_field_name]["notnull"]);
-							$notnull=IsSet($fields[$field_name]["notnull"]);
+							$previous_notnull=(IsSet($previous_fields[$was_field_name]["notnull"]) ? 1 : 0);
+							$notnull=(IsSet($fields[$field_name]["notnull"]) ? 1 : 0);
 							if($previous_notnull!=$notnull)
 							{
 								$change["ChangedNotNull"]=1;
@@ -536,7 +567,7 @@ class metabase_manager_class
 						if(strcmp($error=$this->GetField($field_declaration,$field_name,1,$query),""))
 							return($error);
 						$field_declaration["Declaration"]=$query;
-						$this->AddDefinitionChange($changes,"TABLES",$table_name,array("AddedFields"=>array($field_name=>$field_declaration)));
+						$this->AddDefinitionChange($changes,"TABLES",$was_table_name,array("AddedFields"=>array($field_name=>$field_declaration)));
 						MetabaseDebug($this->database,"Added field '$field_name' to table '$table_name'");
 					}
 				}
@@ -545,11 +576,64 @@ class metabase_manager_class
 					$field_name=Key($previous_fields);
 					if(!IsSet($defined_fields[$field_name]))
 					{
-						$this->AddDefinitionChange($changes,"TABLES",$table_name,array("RemovedFields"=>array($field_name=>array())));
+						$this->AddDefinitionChange($changes,"TABLES",$was_table_name,array("RemovedFields"=>array($field_name=>array())));
 						MetabaseDebug($this->database,"Removed field '$field_name' from table '$table_name'");
 					}
 				}
-
+				$has_primary_key=IsSet($this->database_definition["TABLES"][$table_name]["PRIMARYKEY"]);
+				if($has_primary_key)
+					$this->AddDefinitionChange($information,"TABLES",$was_table_name,array("PrimaryKey"=>array("key"=>$this->database_definition["TABLES"][$table_name]["PRIMARYKEY"])));
+				$had_primary_key=IsSet($previous_definition["TABLES"][$was_table_name]["PRIMARYKEY"]);
+				if($had_primary_key)
+					$this->AddDefinitionChange($information,"TABLES",$was_table_name,array("PrimaryKey"=>array("was"=>$previous_definition["TABLES"][$was_table_name]["PRIMARYKEY"])));
+				if($has_primary_key)
+				{
+					if($had_primary_key)
+					{
+						$changed=0;
+						$fields=$this->database_definition["TABLES"][$table_name]["PRIMARYKEY"]["FIELDS"];
+						if(count($fields)!=count($previous_definition["TABLES"][$was_table_name]["PRIMARYKEY"]["FIELDS"]))
+							$changed=1;
+						else
+						{
+							for($field=0, Reset($fields); $field<count($fields); Next($fields), $field++)
+							{
+								$name=Key($fields);
+								if(!IsSet($previous_definition["TABLES"][$was_table_name]["PRIMARYKEY"]["FIELDS"][$name])
+								|| count($fields[$name])!=count($previous_definition["TABLES"][$was_table_name]["PRIMARYKEY"]["FIELDS"][$name])
+								|| IsSet($fields[$name]["sorting"])!=IsSet($previous_definition["TABLES"][$was_table_name]["PRIMARYKEY"]["FIELDS"][$name]["sorting"])
+								|| (IsSet($fields[$name]["sorting"])
+								&& strcmp($fields[$name]["sorting"],$previous_definition["TABLES"][$was_table_name]["PRIMARYKEY"]["FIELDS"][$name]["sorting"])))
+								{
+									$changed=1;
+									break;
+								}
+							}
+						}
+						if($changed)
+						{
+							$this->AddDefinitionChange($changes,"TABLES",$was_table_name,array("ChangedPrimaryKey"=>$this->database_definition["TABLES"][$table_name]["PRIMARYKEY"]));
+							MetabaseDebug($this->database,"Changed primary key of table '$table_name'");
+						}
+					}
+					else
+					{
+						$this->AddDefinitionChange($changes,"TABLES",$was_table_name,array("AddedPrimaryKey"=>$this->database_definition["TABLES"][$table_name]["PRIMARYKEY"]));
+						MetabaseDebug($this->database,"Added primary key to table '$table_name'");
+					}
+				}
+				elseif(IsSet($previous_definition["TABLES"][$was_table_name]["PRIMARYKEY"]))
+				{
+					$this->AddDefinitionChange($changes,"TABLES",$was_table_name,array("RemovedPrimaryKey"=>$previous_definition["TABLES"][$was_table_name]["PRIMARYKEY"]));
+					MetabaseDebug($this->database,"Removed primary key from table '$table_name'");
+				}
+				if(IsSet($changes["TABLES"][$was_table_name]))
+				{
+					if(IsSet($information["TABLES"][$was_table_name]["AutoIncrement"]))
+						$changes["TABLES"][$was_table_name]["AutoIncrement"]=$information["TABLES"][$was_table_name]["AutoIncrement"];
+					if(IsSet($information["TABLES"][$was_table_name]["PrimaryKey"]))
+						$changes["TABLES"][$was_table_name]["PrimaryKey"]=$information["TABLES"][$was_table_name]["PrimaryKey"];
+				}
 				$indexes=(IsSet($this->database_definition["TABLES"][$table_name]["INDEXES"]) ? $this->database_definition["TABLES"][$table_name]["INDEXES"] : array());
 				$previous_indexes=(IsSet($previous_definition["TABLES"][$was_table_name]["INDEXES"]) ? $previous_definition["TABLES"][$was_table_name]["INDEXES"] : array());
 				for($defined_indexes=array(),Reset($indexes),$index=0;$index<count($indexes);Next($indexes),$index++)
@@ -632,11 +716,10 @@ class metabase_manager_class
 					$index_name=Key($previous_indexes);
 					if(!IsSet($defined_indexes[$index_name]))
 					{
-						$this->AddDefinitionChange($changes,"INDEXES",$table_name,array("RemovedIndexes"=>array($index_name=>1)));
-						MetabaseDebug($this->database,"Removed index '$index_name' from table '$table_name'");
+						$this->AddDefinitionChange($changes,"INDEXES",$table_name,array("RemovedIndexes"=>array($index_name=>$was_table_name)));
+						MetabaseDebug($this->database,"Removed index '$index_name' from table '$was_table_name'");
 					}
 				}
-
 			}
 			else
 			{
@@ -651,7 +734,7 @@ class metabase_manager_class
 			$table_name=Key($previous_definition["TABLES"]);
 			if(!IsSet($defined_tables[$table_name]))
 			{
-				$this->AddDefinitionChange($changes,"TABLES",$table_name,array("Remove"=>1));
+				$this->AddDefinitionChange($changes,"TABLES",$table_name,array("Remove"=>$previous_definition["TABLES"][$table_name]));
 				MetabaseDebug($this->database,"Removed table '$table_name'");
 			}
 		}
@@ -714,6 +797,18 @@ class metabase_manager_class
 		return("");
 	}
 
+	Function CheckTableAutoIncrement(&$table_definition)
+	{
+		$fields=$table_definition["FIELDS"];
+		for($field=0, Reset($fields); $field<count($fields); Next($fields), $field++)
+		{
+			$name=Key($fields);
+			if(IsSet($fields[$name]["autoincrement"]))
+				return(1);
+		}
+		return(0);
+	}
+
 	Function AlterDatabase(&$previous_definition,&$changes)
 	{
 		if(IsSet($changes["TABLES"]))
@@ -721,10 +816,22 @@ class metabase_manager_class
 			for($change=0,Reset($changes["TABLES"]);$change<count($changes["TABLES"]);Next($changes["TABLES"]),$change++)
 			{
 				$table_name=Key($changes["TABLES"]);
-				if(IsSet($changes["TABLES"][$table_name]["Add"])
-				|| IsSet($changes["TABLES"][$table_name]["Remove"]))
+				$name=(IsSet($changes["TABLES"][$table_name]["name"]) ? $changes["TABLES"][$table_name]["name"] : $table_name);
+				if(IsSet($changes["TABLES"][$table_name]["Remove"]))
+				{
+					if(strcmp($error=$this->DropTable($changes["TABLES"][$table_name]["Remove"],1),""))
+						return("database driver is not able to perform the requested alterations: ".$error);
 					continue;
-				if(!MetabaseAlterTable($this->database,$table_name,$changes["TABLES"][$table_name],1))
+				}
+				if($this->CheckTableAutoIncrement($this->database_definition["TABLES"][$name])
+				&& !MetabaseSupport($this->database,"AutoIncrement"))
+					return("database driver does not support table autoincrement fields");
+				if(IsSet($changes["TABLES"][$table_name]["Add"]))
+				{
+					if(strcmp($error=$this->CreateTable($table_name,$this->database_definition["TABLES"][$name],1),""))
+						return("database driver is not able to perform the requested alterations: ".$error);
+				}
+				elseif(!MetabaseAlterTable($this->database,$table_name,$changes["TABLES"][$table_name],1))
 					return("database driver is not able to perform the requested alterations: ".MetabaseError($this->database));
 			}
 		}
@@ -776,7 +883,7 @@ class metabase_manager_class
 					$indexes=$changes["INDEXES"][$table_name]["RemovedIndexes"];
 					for($index=0,Reset($indexes);$index<count($indexes);Next($indexes),$index++)
 					{
-						if(!MetabaseDropIndex($this->database,$table_name,Key($indexes)))
+						if(!MetabaseDropIndex($this->database,$indexes[Key($indexes)],Key($indexes)))
 						{
 							$error=MetabaseError($this->database);
 							break;
@@ -812,7 +919,7 @@ class metabase_manager_class
 				$table_name=Key($changes["TABLES"]);
 				if(IsSet($changes["TABLES"][$table_name]["Remove"]))
 				{
-					if(!strcmp($error=$this->DropTable($table_name),""))
+					if(!strcmp($error=$this->DropTable($changes["TABLES"][$table_name]["Remove"],0),""))
 						$alterations++;
 				}
 				else
@@ -833,7 +940,7 @@ class metabase_manager_class
 				$table_name=Key($changes["TABLES"]);
 				if(IsSet($changes["TABLES"][$table_name]["Add"]))
 				{
-					if(!strcmp($error=$this->CreateTable($table_name,$this->database_definition["TABLES"][$table_name]),""))
+					if(!strcmp($error=$this->CreateTable($table_name,$this->database_definition["TABLES"][$table_name],0),""))
 						$alterations++;
 				}
 				if(strcmp($error,""))
@@ -960,17 +1067,20 @@ class metabase_manager_class
 				case "\"":
 				case ">":
 				case "<":
-					$code=Ord($string[$character]);
+				case "&":
+					$escaped.=HtmlEntities($string[$character]);
 					break;
 				default:
 					$code=Ord($string[$character]);
 					if($code<32
 					|| $code>127)
+					{
+						$escaped.="&#$code;";
 						break;
+					}
 					$escaped.=$string[$character];
-					continue 2;
+					break;
 			}
-			$escaped.="&#$code;";
 		}
 		return($escaped);
 	}
@@ -1043,6 +1153,8 @@ class metabase_manager_class
 					case "integer":
 						if(IsSet($field["unsigned"]))
 							$output("    <unsigned>1</unsigned>$eol");
+						if(IsSet($field["autoincrement"]))
+							$output("    <autoincrement>1</autoincrement>$eol");
 						break;
 					case "text":
 					case "clob":
@@ -1065,6 +1177,22 @@ class metabase_manager_class
 				if(IsSet($field["default"]))
 					$output("    <default>".$this->EscapeSpecialCharacters($field["default"])."</default>$eol");
 				$output("   </field>$eol");
+			}
+
+			if(IsSet($this->database_definition["TABLES"][$table_name]["PRIMARYKEY"]))
+			{
+				$output("$eol   <primarykey>$eol");
+				$fields=$this->database_definition["TABLES"][$table_name]["PRIMARYKEY"]["FIELDS"];
+				for(Reset($fields),$field_number=0;$field_number<count($fields);$field_number++,Next($fields))
+				{
+					$field_name=Key($fields);
+					$field=$fields[$field_name];
+					$output("    <field>$eol     <name>$field_name</name>$eol");
+					if(IsSet($field["sorting"]))
+						$output("     <sorting>".$field["sorting"]."</sorting>$eol");
+					$output("    </field>$eol");
+				}
+				$output("   </primarykey>$eol");
 			}
 
 			if(IsSet($this->database_definition["TABLES"][$table_name]["INDEXES"]))
@@ -1135,6 +1263,7 @@ class metabase_manager_class
 					$rows=MetabaseNumberOfRows($this->database,$result);
 				if($rows>0)
 				{
+					$fields=$this->database_definition["TABLES"][$table_name]["FIELDS"];
 					$output("$eol  <initialization>$eol");
 					for($row=0;$row<$rows;$row++)
 					{
@@ -1230,8 +1359,13 @@ class metabase_manager_class
 
 	Function ParseDatabaseDefinitionFile($input_file,&$database_definition,&$variables,$fail_on_invalid_names=1)
 	{
-		if(!($file=fopen($input_file,"r")))
-			return("Could not open input file \"$input_file\"");
+		if(!($file=@fopen($input_file,"r")))
+		{
+			$error="Could not open input file \"$input_file\"";
+			if(IsSet($php_errormsg))
+				$error.=" (".$php_errormsg.")";
+			return($error);
+		}
 		$parser=new metabase_parser_class;
 		$parser->variables=$variables;
 		$parser->fail_on_invalid_names=$fail_on_invalid_names;
@@ -1289,6 +1423,8 @@ class metabase_manager_class
 									MetabaseDebug($this->database,"\tChanged field '$field_name' type to '".$fields[$field_name]["type"]."'");
 								if(IsSet($fields[$field_name]["unsigned"]))
 									MetabaseDebug($this->database,"\tChanged field '$field_name' type to '".($fields[$field_name]["unsigned"] ? "" : "not ")."unsigned'");
+								if(IsSet($fields[$field_name]["autoincrement"]))
+									MetabaseDebug($this->database,"\tChanged field '$field_name' type to '".($fields[$field_name]["autoincrement"] ? "" : "not ")."autoincrement'");
 								if(IsSet($fields[$field_name]["length"]))
 									MetabaseDebug($this->database,"\tChanged field '$field_name' length to '".($fields[$field_name]["length"]==0 ? "no length" : $fields[$field_name]["length"])."'");
 								if(IsSet($fields[$field_name]["ChangedDefault"]))
@@ -1297,6 +1433,12 @@ class metabase_manager_class
 									MetabaseDebug($this->database,"\tChanged field '$field_name' notnull to ".(IsSet($fields[$field_name]["notnull"]) ? "'1'" : "0"));
 							}
 						}
+						if(IsSet($changes["TABLES"][$table_name]["RemovedPrimaryKey"]))
+							MetabaseDebug($this->database,"\tRemoved primary key");
+						if(IsSet($changes["TABLES"][$table_name]["AddedPrimaryKey"]))
+							MetabaseDebug($this->database,"\tAdded primary key");
+						if(IsSet($changes["TABLES"][$table_name]["ChangedPrimaryKey"]))
+							MetabaseDebug($this->database,"\tChanged primary key");
 					}
 				}
 			}
@@ -1320,11 +1462,16 @@ class metabase_manager_class
 						if(IsSet($changes["SEQUENCES"][$sequence_name]["Change"]))
 						{
 							$sequences=$changes["SEQUENCES"][$sequence_name]["Change"];
-							for($sequence=0,Reset($sequences);$sequence<count($sequences);$sequence++,Next($sequences))
+							for($s=0,Reset($sequences);$s<count($sequences);$s++,Next($sequences))
 							{
-								$sequence_name=Key($sequences);
-								if(IsSet($sequences[$sequence_name]["start"]))
-									MetabaseDebug($this->database,"\tChanged sequence '$sequence_name' start to '".$sequences[$sequence_name]["start"]."'");
+								$name=Key($sequences);
+								for($sequence=0;$sequence<count($sequences[$name]);$sequence++)
+								{
+									if(IsSet($sequences[$name][$sequence]["start"]))
+										MetabaseDebug($this->database,"\tChanged sequence '$name' start to '".$sequences[$name][$sequence]["start"]."'");
+									if(IsSet($sequences[$name][$sequence]["on"]))
+										MetabaseDebug($this->database,"\tChanged sequence '$name' to on field '".$sequences[$name][$sequence]["on"]["field"]."' of table '".$sequences[$name][$sequence]["on"]["table"]."'");
+								}
 							}
 						}
 					}
@@ -1347,7 +1494,7 @@ class metabase_manager_class
 				{
 					$indexes=$changes["INDEXES"][$table_name]["RemovedIndexes"];
 					for($index=0,Reset($indexes);$index<count($indexes);Next($indexes),$index++)
-						MetabaseDebug($this->database,"\tRemoved index '".Key($indexes)."' of table '$table_name'");
+						MetabaseDebug($this->database,"\tRemoved index '".Key($indexes)."' of table '".$indexes[Key($indexes)]."'");
 				}
 				if(IsSet($changes["INDEXES"][$table_name]["ChangedIndexes"]))
 				{
@@ -1366,7 +1513,7 @@ class metabase_manager_class
 		}
 	}
 
-	Function UpdateDatabase($current_schema_file,$previous_schema_file,&$arguments,&$variables)
+	Function UpdateDatabase($current_schema_file,$previous_schema_file,&$arguments,&$variables, $check=0)
 	{
 		if(strcmp($error=$this->ParseDatabaseDefinitionFile($current_schema_file,$this->database_definition,$variables,$this->fail_on_invalid_names),""))
 		{
@@ -1385,16 +1532,19 @@ class metabase_manager_class
 			&& !strcmp($error=$this->CompareDefinitions($database_definition,$changes),"")
 			&& count($changes))
 			{
-				if(!strcmp($error=$this->AlterDatabase($database_definition,$changes),""))
+				if($check
+				|| !strcmp($error=$this->AlterDatabase($database_definition,$changes),""))
 				{
-					$copy=1;
+					
+					$copy=!$check;
 					$this->DumpDatabaseChanges($changes);
 				}
 			}
 		}
 		else
 		{
-			if(!strcmp($error=$this->CreateDatabase(),""))
+			if(!$check
+			&& !strcmp($error=$this->CreateDatabase(),""))
 				$copy=1;
 		}
 		if(strcmp($error,""))
@@ -1421,8 +1571,10 @@ class metabase_manager_class
 		return($this->DumpDatabase($dump_arguments));
 	}
 
-	Function GetDefinitionFromDatabase()
+	Function GetDefinitionFromDatabase(&$arguments)
 	{
+		if(strcmp($error=$this->SetupDatabase($arguments),""))
+			return($this->error="Could not setup database: $error");
 		MetabaseSetDatabase($this->database,$database=MetabaseSetDatabase($this->database,""));
 		if(strlen($database)==0)
 			return("it was not specified a valid database name");
@@ -1448,6 +1600,11 @@ class metabase_manager_class
 					return(MetabaseError($this->database));
 				$this->database_definition["TABLES"][$table_name]["FIELDS"][$field_name]=$definition[0];
 			}
+			if(!MetabaseListTableKeys($this->database,$table_name,1,$keys))
+				return(MetabaseError($this->database));
+			if(count($keys)
+			&& !MetabaseGetTableKeyDefinition($this->database,$table_name,$keys[0],1,$this->database_definition["TABLES"][$table_name]["PRIMARYKEY"]))
+				return(MetabaseError($this->database));
 			if(!MetabaseListTableIndexes($this->database,$table_name,$indexes))
 				return(MetabaseError($this->database));
 			if(count($indexes))

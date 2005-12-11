@@ -1,4 +1,4 @@
-<?
+<?php
 if(!defined("METABASE_IFX_INCLUDED"))
 {
 	define("METABASE_IFX_INCLUDED",1);
@@ -6,7 +6,7 @@ if(!defined("METABASE_IFX_INCLUDED"))
 /*
  * metabase_ifx.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/metabase_ifx.php,v 1.1.1.1 2003/02/27 20:55:33 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/metabase_ifx.php,v 1.19 2004/07/27 06:26:03 mlemos Exp $
  *
  */
 
@@ -30,6 +30,9 @@ class metabase_ifx_class extends metabase_database_class
 	var $query_parameters=array();
 	var $query_parameter_values=array();
 	var $escape_quotes="'";
+	var $manager_class_name="metabase_manager_ifx_class";
+	var $manager_include="manager_ifx.php";
+	var $manager_included_constant="METABASE_MANAGER_IFX_INCLUDED";
 
 	Function SetIFXError($scope,$message)
 	{
@@ -157,13 +160,11 @@ class metabase_ifx_class extends metabase_database_class
 		ifx_nullformat(1);
 		ifx_blobinfile_mode(0);
 		$query=ltrim($query);
-		if(GetType($space=strpos($query," "))!="integer")
-			$space=strlen($query);
-		$query_type=strtolower(substr($query,0,$space));
-		if(($select=($query_type=="select"))
+		$query_string=strtolower(strtok($query," \t\n\r"));
+		if(($select=!strcmp($query_string,"select"))
 		&& $limit>0)
 		{
-			$query=substr($query,0,$space)." FIRST ".($first+$limit)." ".substr($query,strlen("select"));
+			$query=$query_string." FIRST ".strval($first+$limit)." ".strtok("");
 			$cursor_type=($first ? IFX_SCROLL : 0);
 		}
 		else
@@ -177,7 +178,7 @@ class metabase_ifx_class extends metabase_database_class
 		if($result)
 		{
 			$result_value=intval($result);
-			switch($query_type)
+			switch($query_string)
 			{
 				case "select":
 					$this->current_row[$result_value]=-1;
@@ -218,7 +219,7 @@ class metabase_ifx_class extends metabase_database_class
 		&& $this->auto_commit
 		&& IsSet($this->options["Logging"])
 		&& !strcmp($this->options["Logging"],"ANSI")
-		&& substr(strtolower(ltrim($query)),0,strlen("select"))!="select"
+		&& strcmp(strtolower(strtok(ltrim($query)," \t\r\n")),"select")
 		&& !$this->DoQuery("COMMIT"))
 		{
 			$this->FreeResult($result);
@@ -532,54 +533,6 @@ class metabase_ifx_class extends metabase_database_class
 		return(ifx_free_result($result));
 	}
 
-	Function DBAQuery($query)
-	{
-		if(!IsSet($this->options[$option="DBAUser"])
-		|| !IsSet($this->options[$option="DBAPassword"]))
-			return($this->SetError("DBA query","it was not specified the Informix $option option"));
-		return($this->Connect(1)
-		&& $this->DoQuery($query));
-	}
-
-	Function CreateDatabase($name)
-	{
-		if(IsSet($this->options["Logging"]))
-		{
-			switch($this->options["Logging"])
-			{
-				case "Unbuffered":
-					$logging=" WITH LOG";
-					break;
-				case "Buffered":
-					$logging=" WITH BUFFERED LOG";
-					break;
-				case "ANSI":
-					$logging=" WITH LOG MODE ANSI";
-					break;
-				default:
-					return($this->SetError("Create database",$this->options["Logging"]." is not a support logging type"));
-			}
-		}
-		else
-			$logging="";
-		if(!$this->DBAQuery("CREATE DATABASE $name$logging"))
-			return(0);
-		if(strcmp((IsSet($this->options[$option="DBAUser"]) ? $this->options[$option="DBAUser"] : ""),$this->user)
-		&& !$this->DBAQuery("GRANT RESOURCE TO ".$this->user))
-		{
-			$error=$this->Error();
-			if(!$this->DropDatabase($name))
-				return($this->SetError("Create database","Could not drop the created the database (".$this->Error().") after not being able to grant access privileges to the specified user ($error)"));
-			return(0);
-		}
-		return(1);
-	}
-
-	Function DropDatabase($name)
-	{
-		return($this->DBAQuery("DROP DATABASE $name"));
-	}
-
 	Function GetLOBFieldValue($prepared_query,$parameter,$lob,&$value,$binary)
 	{
 		if(!$this->Connect(0))
@@ -622,7 +575,7 @@ class metabase_ifx_class extends metabase_database_class
 
 	Function FreeCLOBValue($prepared_query,$clob,&$value,$success)
 	{
-		$this->FreeLOBValue($prepared_query,$clob,&$value);
+		$this->FreeLOBValue($prepared_query,$clob,$value);
 	}
 
 	Function GetBLOBFieldValue($prepared_query,$parameter,$blob,&$value)
@@ -632,7 +585,7 @@ class metabase_ifx_class extends metabase_database_class
 
 	Function FreeBLOBValue($prepared_query,$blob,&$value,$success)
 	{
-		$this->FreeLOBValue($prepared_query,$blob,&$value);
+		$this->FreeLOBValue($prepared_query,$blob,$value);
 	}
 
 	Function GetBooleanFieldValue($value)
@@ -733,97 +686,6 @@ class metabase_ifx_class extends metabase_database_class
 		if(!IsSet($this->options["Logging"]))
 			return($this->SetError("Rollback transaction","transactions are not supported on databases without logging"));
 		return($this->Query("ROLLBACK") && (!strcmp($this->options["Logging"],"ANSI") || $this->Query("BEGIN")));
-	}
-
-	Function AlterTable($name,&$changes,$check)
-	{
-		if($check)
-		{
-			for($change=0,Reset($changes);$change<count($changes);Next($changes),$change++)
-			{
-				switch(Key($changes))
-				{
-					case "AddedFields":
-					case "RemovedFields":
-					case "RenamedFields":
-					case "ChangedFields":
-					case "name":
-						break;
-					default:
-						return($this->SetError("Alter table","change type \"".Key($changes)."\" not yet supported"));
-				}
-			}
-			return(1);
-		}
-		else
-		{
-			$query="";
-			if(IsSet($changes["RemovedFields"]))
-			{
-				$fields=$changes["RemovedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-				{
-					if(strcmp($query,""))
-						$query.=", ";
-					$query.="DROP ".Key($fields);
-				}
-			}
-			if(IsSet($changes["RenamedFields"]))
-			{
-				if(strcmp($query,"")
-				&& !$this->Query("ALTER TABLE $name $query"))
-					return(0);
-				$query="";
-				$fields=$changes["RenamedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-				{
-					if(!$this->Query("RENAME COLUMN $name.".Key($fields)." TO ".$fields[Key($fields)]["name"]))
-						return(0);
-				}
-			}
-			if(IsSet($changes["ChangedFields"]))
-			{
-				$fields=$changes["ChangedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-				{
-					if(strcmp($query,""))
-						$query.=", ";
-					$query.="MODIFY ".$fields[Key($fields)]["Declaration"];
-				}
-			}
-			if(IsSet($changes["AddedFields"]))
-			{
-				$fields=$changes["AddedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-				{
-					if(strcmp($query,""))
-						$query.=", ";
-					$query.="ADD ".$fields[Key($fields)]["Declaration"];
-				}
-			}
-			if(strcmp($query,"")
-			&& !$this->Query("ALTER TABLE $name $query"))
-				return(0);
-			return(IsSet($changes["name"]) ? $this->Query("RENAME TABLE $name TO ".$changes["name"]) : 1);
-		}
-	}
-
-	Function CreateSequence($name,$start)
-	{
-		if(!$this->Query("CREATE TABLE _sequence_$name (sequence ".((IsSet($this->options["Use8ByteIntegers"]) && $this->options["Use8ByteIntegers"]) ?  "SERIAL8" : "SERIAL")." NOT NULL)"))
-			return(0);
-		if($start==1
-		|| $this->Query("INSERT INTO _sequence_$name (sequence) VALUES (".($start-1).")"))
-			return(1);
-		$error=$this->Error();
-		if(!$this->Query("DROP TABLE _sequence_$name"))
-			$this->warning="could not drop inconsistent sequence table";
-		return($this->SetError("Create sequence",$error));
-	}
-
-	Function DropSequence($name)
-	{
-		return($this->Query("DROP TABLE _sequence_$name"));
 	}
 
 	Function GetSequenceNextValue($name,&$value)

@@ -1,4 +1,4 @@
-<?
+<?php
 if(!defined("METABASE_TEMPLATE_INCLUDED"))
 {
 	define("METABASE_TEMPLATE_INCLUDED",1);
@@ -6,7 +6,7 @@ if(!defined("METABASE_TEMPLATE_INCLUDED"))
 /*
  * metabase_template.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/metabase_template.php,v 1.1.1.1 2003/02/27 20:55:35 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/metabase_template.php,v 1.5 2002/12/11 22:52:24 mlemos Exp $
  *
  */
 

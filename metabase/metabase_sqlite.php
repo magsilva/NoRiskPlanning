@@ -6,16 +6,17 @@ if(!defined("METABASE_SQLITE_INCLUDED"))
 /*
  *	metabase_sqlite.php
  *
- *	@(#) $Header: /cvsroot/phpsecurityadm/metabase/metabase_sqlite.php,v 1.1.1.1 2003/02/27 20:55:35 koivi Exp $
- *	@author	Jeroen Derks <jeroen@derks.it>
- *
+ *	@(#) $Header: /home/mlemos/cvsroot/metabase/metabase_sqlite.php,v 1.9 2005/11/21 03:53:01 mlemos Exp $
+ *	@author Jeroen Derks <jeroen@derks.it>
+ *	@adapted for PHP extension by John Walton <admin@ryefc.com>
+ *	2005/11/04 updated connect function for persistent connections
  */
  
 class metabase_sqlite_class extends metabase_database_class
 {
 	var $connection=0;
 	var $connected_database_file;
-	var $create_mask=0644;
+	var $opened_persistent=0;
 	var $decimal_factor=1.0;
 	var $results=array();
 	var $highest_fetched_row=array();
@@ -26,8 +27,12 @@ class metabase_sqlite_class extends metabase_database_class
 	var $manager_include="manager_sqlite.php";
 	var $manager_included_constant="METABASE_MANAGER_SQLITE_INCLUDED";
 	var $base_transaction_name="___php_metabase_sqlite_auto_commit_off";
-	var $version='';
-	var $encoding='';
+	var $fixed_float=0;
+	var $select_queries=array(
+		"select"=>"",
+		"show"=>"",
+		"explain"=>""
+	);
 
 	Function GetDatabaseFile($database_name)
 	{
@@ -38,44 +43,40 @@ class metabase_sqlite_class extends metabase_database_class
 
 	Function Connect()
 	{
-		if(!function_exists('sqlite_version'))
-			return($this->SetError("Connect","SQLite support is not available in this PHP configuration"));
-
-		$version=sqlite_version();
-		if($version)
-			$this->version=explode(".",$version);
-		$this->encoding=sqlite_encoding();
-
 		$database_file=$this->GetDatabaseFile($this->database_name);
 		if($this->connection!=0)
 		{
-			if (!strcmp($this->connected_database_file,$database_file))
+			if (!strcmp($this->connected_database_file,$database_file)
+			&& $this->opened_persistent==$this->persistent)
 				return(1);
-
-			sqlite_close($this->connection);
+			if(!$this->opened_persistent)
+				sqlite_close($this->connection);
 			$this->connection=0;
 			$this->affected_rows=-1;
 		}
-		if(!strcmp($this->database_name,""))
-			return(1);
-
+		$function=($this->persistent ? "sqlite_popen" : "sqlite_open");
+		$mode=(IsSet($this->options["AccessMode"]) ? (strcmp($this->options["AccessMode"][0],"0") ? intval($this->options["AccessMode"]) : octdec($this->options["AccessMode"])) : 0640);
+		if(!function_exists($function))
+			return($this->SetError("Connect","SQLite support is not available in this PHP configuration"));
 		if(!@file_exists($database_file))
 			return($this->SetError("Connect","database does not exist"));
-		if(($this->connection=@sqlite_open($database_file,$this->create_mask))==0)
+		if(($this->connection=@$function($database_file, $mode))==0)
 			return($this->SetError("Connect",IsSet($php_errormsg) ? $php_errormsg : "Could not open SQLite database"));
 		if(IsSet($this->supported["Transactions"])
 		&& !$this->auto_commit)
 		{
-			$this->Debug("Query: BEGIN TRANSACTION $this->base_transaction_name");
-			if(!@sqlite_exec("BEGIN TRANSACTION $this->base_transaction_name;",$this->connection))
+			$this->Debug("Query: BEGIN TRANSACTION ".$this->base_transaction_name);
+			if(!@sqlite_query("BEGIN TRANSACTION ".$this->base_transaction_name,$this->connection))
 			{
-				sqlite_close($this->connection);
+				if($this->persistent)
+					sqlite_close($this->connection);
 				$this->connection=0;
 				$this->affected_rows=-1;
 				return($this->SetError("Connect",IsSet($php_errormsg) ? $php_errormsg : "Could not start transaction"));
 			}
 			$this->RegisterTransactionShutdown(0);
 		}
+		$this->opened_persistent=$this->persistent;
 		$this->connected_database_file=$database_file;
 		return(1);
 	}
@@ -87,7 +88,8 @@ class metabase_sqlite_class extends metabase_database_class
 			if(IsSet($this->supported["Transactions"])
 			&& !$this->auto_commit)
 				$this->AutoCommitTransactions(1);
-			sqlite_close($this->connection);
+			if(!$this->persistent)
+				sqlite_close($this->connection);
 			$this->connection=0;
 			$this->affected_rows=-1;
 		}
@@ -95,7 +97,6 @@ class metabase_sqlite_class extends metabase_database_class
 
 	Function Query($query)
 	{
-		$this->Debug("Query: $query");
 		$first=$this->first_selected_row;
 		$limit=$this->selected_row_limit;
 		$this->first_selected_row=$this->selected_row_limit=0;
@@ -103,22 +104,35 @@ class metabase_sqlite_class extends metabase_database_class
 			return($this->SetError("Query","it was not specified a valid database name to select"));
 		if(!$this->Connect())
 			return(0);
-		if(GetType($space=strpos($query_string=strtolower(ltrim($query))," "))=="integer")
-			$query_string=substr($query_string,0,$space);
-		if(($select=($query_string=="select" || $query_string=="show" || $query_string=="explain" ))
+		$query_string=strtolower(strtok(ltrim($query)," \t\n\r"));
+		if(($select=IsSet($this->select_queries[$query_string]))
 		&& $limit>0)
 			$query.=" LIMIT $limit OFFSET $first";
-		if(($result=@sqlite_exec($query.';',$this->connection)))
+		$this->Debug("Query: $query");
+		if(($result=@sqlite_query($query.';',$this->connection)))
 		{
-			$this->results[$result]=array();
 			if($select)
-				$this->highest_fetched_row[$result]=-1;
+			{
+				switch(GetType($result))
+				{
+					case "resource":
+					case "integer":
+						$this->highest_fetched_row[$result]=-1;
+						break;
+					default:
+						$error=sqlite_error_string(sqlite_last_error($this->connection));
+						return($this->SetError("Query","this select query did not return valid result set value: ".$query.(strlen($error) ? " (".$error.")" : "")));
+				}
+			}
 			else
 				$this->affected_rows=sqlite_changes($this->connection);
 			UnSet($this->columns[$result]);
 		}
 		else
-			return($this->SetError("Query",$php_errormsg));
+		{
+			$error=sqlite_error_string(sqlite_last_error($this->connection));
+			return($this->SetError("Query",$error));
+		}
 		return($result);
 	}
 
@@ -197,31 +211,38 @@ class metabase_sqlite_class extends metabase_database_class
 
 	Function Fetch($result)
 	{
-		if(!$this->results[$result])
-			if(!($this->results[$result]=@sqlite_fetch_array($result)))
-				return($this->SetError("Fetch result array",$php_errormsg));
+		if(GetType($result)=="boolean")
+		{
+			if(!$result)
+				return($this->SetError("Fetch result array","invalid result set"));
+			$this->results[$result]=array();
+			return($result);
+		}
+		else
+		{
+			if(!IsSet($this->results[$result]))
+				$this->results[$result]=@sqlite_fetch_all($result);
+			if(GetType($this->results[$result])!="array")
+				return($this->SetError("Fetch result array",IsSet($php_errormsg) ? $php_errormsg : "could not fetch the query results"));
+		}
 		return(1);
 	}
 
 	Function FetchResult($result,$row,$field)
 	{
-		if(!$this->Fetch($result))
-			return(0);
-		if(is_string($field))
-		{
-			if(!$this->columns[$result])
-				$this->GetColumnNames($result,$dummy);
-			$field=$this->columns[$result][$field];
-		}
+		if(($column=$this->GetColumn($result,$field))==-1
+		|| !$this->Fetch($result)/*
+		|| !IsSet($this->results[$result][$row][$column])*/)
+			return("");
 		$this->highest_fetched_row[$result]=max($this->highest_fetched_row[$result],$row);
-		return($this->results[$result][$row][$field]);
+		return($this->results[$result][$row][$column]);
 	}
 
 	Function FetchResultArray($result,&$array,$row)
 	{
-		if(!$this->Fetch($result))
-			return(0);
-		$array=$this->results[$result][$row];
+		if(!sqlite_seek($result,$row)
+		|| !($array=sqlite_fetch_array($result)))
+			return($this->SetError("Fetch result array",sql_last_error($this->connection)));
 		$this->highest_fetched_row[$result]=max($this->highest_fetched_row[$result],$row);
 		return($this->ConvertResultRow($result,$array));
 	}
@@ -260,9 +281,7 @@ class metabase_sqlite_class extends metabase_database_class
 
 	Function NumberOfRows($result)
 	{
-		if(!$this->Fetch($result))
-			return(0);
-		return(count($this->results[$result]));
+		return sqlite_num_rows($result);
 	}
 
 	Function FreeResult(&$result)
@@ -326,7 +345,7 @@ class metabase_sqlite_class extends metabase_database_class
 
 	Function GetIntegerFieldTypeDeclaration($name,&$field)
 	{
-		return("$name ".(IsSet($field["unsigned"]) ? "INT UNSIGNED" : "INT").(IsSet($field["default"]) ? " DEFAULT ".$field["default"] : "").(IsSet($field["notnull"]) ? " NOT NULL" : ""));
+		return($name." INTEGER".(IsSet($field["autoincrement"]) ? " AUTOINCREMENT" : "").(IsSet($field["unsigned"]) ? " UNSIGNED" : "").(IsSet($field["default"]) ? " DEFAULT ".$field["default"] : "").(IsSet($field["notnull"]) ? " NOT NULL" : ""));
 	}
 
 	Function GetDateFieldTypeDeclaration($name,&$field)
@@ -348,24 +367,12 @@ class metabase_sqlite_class extends metabase_database_class
 	{
 		if(IsSet($this->options["FixedFloat"]))
 			$this->fixed_float=$this->options["FixedFloat"];
-		else
-		{
-			if($this->connection==0)
-				$this->Connect();
-		}
 		return("$name DOUBLE".($this->fixed_float ? "(".($this->fixed_float+2).",".$this->fixed_float.")" : "").(IsSet($field["default"]) ? " DEFAULT ".$this->GetFloatFieldValue($field["default"]) : "").(IsSet($field["notnull"]) ? " NOT NULL" : ""));
 	}
 
 	Function GetDecimalFieldTypeDeclaration($name,&$field)
 	{
 		return("$name BIGINT".(IsSet($field["default"]) ? " DEFAULT ".$this->GetDecimalFieldValue($field["default"]) : "").(IsSet($field["notnull"]) ? " NOT NULL" : ""));
-	}
-
-	Function EscapeText(&$text)
-	{
-		if(strcmp($this->escape_quotes,"'"))
-			$text=str_replace($this->escape_quotes,$this->escape_quotes.$this->escape_quotes,$text);
-		$text=str_replace("'",$this->escape_quotes."'",$text);
 	}
 
 	Function GetCLOBFieldValue($prepared_query,$parameter,$clob,&$value)
@@ -381,7 +388,7 @@ class metabase_sqlite_class extends metabase_database_class
 			$value.=$data;
 		}
 		$value.="'";
-		return(1);			
+		return(1);
 	}
 
 	Function FreeCLOBValue($prepared_query,$clob,&$value,$success)
@@ -396,13 +403,12 @@ class metabase_sqlite_class extends metabase_database_class
 			if(!MetabaseReadLOB($blob,$data,$this->lob_buffer_length))
 			{
 				$value="";
-				return($this->SetError("Get BLOB field value",MetabaseLOBError($clob)));
+				return($this->SetError("Get BLOB field value",MetabaseLOBError($blob)));
 			}
-			$this->EscapeText($data);
-			$value.=$data;
+			$value.=sqlite_udf_encode_binary($data);
 		}
 		$value.="'";
-		return(1);			
+		return(1);
 	}
 
 	Function FreeBLOBValue($prepared_query,$blob,&$value,$success)
@@ -428,13 +434,38 @@ class metabase_sqlite_class extends metabase_database_class
 		if(!IsSet($this->columns[$result_value]))
 		{
 			$this->columns[$result_value]=array();
-			$fields=sqlite_fetch_field_array($result);
-			$columns=count($fields);
+			$columns=sqlite_num_fields($result);
 			for($column=0;$column<$columns;$column++)
-				$this->columns[$result_value][strtolower($fields[$column])]=$column;
+				$this->columns[$result_value][strtolower(sqlite_field_name($result,$column))]=$column;
 		}
 		$column_names=$this->columns[$result_value];
 		return(1);
+	}
+
+	Function GetColumn($result,$field)
+	{
+		if(!$this->GetColumnNames($result,$column_names))
+			return(-1);
+		if(GetType($field)=="integer")
+		{
+			if(($column=$field)<0
+			|| $column>=count($this->columns[$result]))
+			{
+				$this->SetError("Get column","attempted to fetch an query result column out of range");
+				return(-1);
+			}
+		}
+		else
+		{
+			$name=strtolower($field);
+			if(!IsSet($this->columns[$result][$name]))
+			{
+				$this->SetError("Get column","attempted to fetch an unknown query result column");
+				return(-1);
+			}
+			$column=$this->columns[$result][$name];
+		}
+		return($column);
 	}
 
 	Function NumberOfColumns($result)
@@ -444,8 +475,7 @@ class metabase_sqlite_class extends metabase_database_class
 			$this->SetError("Get number of columns","it was specified an inexisting result set");
 			return(-1);
 		}
-		$this->GetColumnNames($result,$dummy);
-		return(count($dummy));
+		return(sqlite_num_fields($result));
 	}
 
 	Function GetSequenceNextValue($name,&$value)
@@ -461,6 +491,18 @@ class metabase_sqlite_class extends metabase_database_class
 		return(1);
 	}
 
+	Function GetNextKey($table,&$key)
+	{
+		$key="NULL";
+		return(1);
+	}
+
+	Function GetInsertedKey($table,&$value)
+	{
+		$value=intval(sqlite_last_insert_rowid($this->connection));
+		return(1);
+	}
+
 	Function AutoCommitTransactions($auto_commit)
 	{
 		$this->Debug("AutoCommit: ".($auto_commit ? "On" : "Off"));
@@ -472,12 +514,12 @@ class metabase_sqlite_class extends metabase_database_class
 		{
 			if($auto_commit)
 			{
-				if(!$this->Query("END TRANSACTION $this->base_transaction_name"))
+				if(!$this->Query("END TRANSACTION ".$this->base_transaction_name))
 					return(0);
 			}
 			else
 			{
-				if(!$this->Query("BEGIN TRANSACTION $this->base_transaction_name"))
+				if(!$this->Query("BEGIN TRANSACTION ".$this->base_transaction_name))
 					return(0);
 			}
 		}
@@ -487,26 +529,26 @@ class metabase_sqlite_class extends metabase_database_class
 
 	Function CommitTransaction()
 	{
- 		$this->Debug("Commit Transaction");
+		$this->Debug("Commit Transaction");
 		if(!IsSet($this->supported["Transactions"]))
 			return($this->SetError("Commit transaction","transactions are not in use"));
 		if($this->auto_commit)
 			return($this->SetError("Commit transaction","transaction changes are being auto commited"));
-		if(!$this->Query("COMMIT TRANSACTION $this->base_transaction_name"))
+		if(!$this->Query("COMMIT TRANSACTION ".$this->base_transaction_name))
 			return(0);
-		return($this->Query("BEGIN TRANSACTION $this->base_transaction_name"));
+		return($this->Query("BEGIN TRANSACTION ".$this->base_transaction_name));
 	}
 
 	Function RollbackTransaction()
 	{
- 		$this->Debug("Rollback Transaction");
+		$this->Debug("Rollback Transaction");
 		if(!IsSet($this->supported["Transactions"]))
 			return($this->SetError("Rollback transaction","transactions are not in use"));
 		if($this->auto_commit)
 			return($this->SetError("Rollback transaction","transactions can not be rolled back when changes are auto commited"));
-		if(!$this->Query("ROLLBACK TRANSACTION $this->base_transaction_name"))
+		if(!$this->Query("ROLLBACK TRANSACTION ".$this->base_transaction_name))
 			return(0);
-		return($this->Query("BEGIN TRANSACTION $this->base_transaction_name"));
+		return($this->Query("BEGIN TRANSACTION ".$this->base_transaction_name));
 	}
 
 	Function Setup()
@@ -520,11 +562,14 @@ class metabase_sqlite_class extends metabase_database_class
 		$this->supported["SelectRowRanges"]=
 		$this->supported["Replace"]=
 		$this->supported["Transactions"]=
+		$this->supported["LOBs"]=
+		$this->supported["AutoIncrement"]=
+		$this->supported["PrimaryKey"]=
+		$this->supported["OmitInsertKey"]=
 			1;
 		$this->decimal_factor=pow(10.0,$this->decimal_places);
 		return("");
 	}
 };
-
 }
 ?>

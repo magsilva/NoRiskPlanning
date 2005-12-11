@@ -1,4 +1,4 @@
-<?
+<?php
 if(!defined("METABASE_OCI_INCLUDED"))
 {
 	define("METABASE_OCI_INCLUDED",1);
@@ -6,7 +6,7 @@ if(!defined("METABASE_OCI_INCLUDED"))
 /*
  * metabase_oci.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/metabase_oci.php,v 1.1.1.1 2003/02/27 20:55:34 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/metabase_oci.php,v 1.33 2005/09/19 06:05:04 mlemos Exp $
  *
  */
 
@@ -26,6 +26,11 @@ class metabase_oci_class extends metabase_database_class
 	var $row_buffer=array();
 	var $highest_fetched_row=array();
 	var $escape_quotes="'";
+	var $manager_class_name="metabase_manager_oci_class";
+	var $manager_include="manager_oci.php";
+	var $manager_included_constant="METABASE_MANAGER_OCI_INCLUDED";
+	var $auto_increment_sequence_prefix="auto_increment_";
+	var $auto_increment_trigger_suffix="_key_insert";
 
 	Function SetOCIError($scope,$message,$error)
 	{
@@ -92,7 +97,7 @@ class metabase_oci_class extends metabase_database_class
 	{
 		if(IsSet($field["unsigned"]))
 			$this->warning="unsigned integer field \"$name\" is being declared as signed integer";
-		return("$name ".$this->GetFieldTypeDeclaration($field).(IsSet($field["default"]) ? " DEFAULT ".$field["default"] : "").(IsSet($field["notnull"]) ? " NOT NULL" : ""));
+		return("$name ".$this->GetFieldTypeDeclaration($field).(IsSet($field["autoincrement"]) ? " DEFAULT NULL" : (IsSet($field["default"]) ? " DEFAULT ".$field["default"] : "")).(IsSet($field["notnull"]) ? " NOT NULL" : ""));
 	}
 
 	Function GetTextFieldTypeDeclaration($name,&$field)
@@ -668,133 +673,22 @@ class metabase_oci_class extends metabase_database_class
 		return(OCIFreeCursor($result));
 	}
 
-	Function CreateDatabase($name)
+	Function GetNextKey($table,&$key)
 	{
-		if(!IsSet($this->options[$option="DBAUser"])
-		|| !IsSet($this->options[$option="DBAPassword"]))
-			return($this->SetError("Create database","it was not specified the Oracle $option option"));
-		$success=0;
-		if($this->Connect($this->options["DBAUser"],$this->options["DBAPassword"],0))
-		{
-			if($this->DoQuery("CREATE USER ".$this->user." IDENTIFIED BY ".$this->password.(IsSet($this->options["DefaultTablespace"]) ? " DEFAULT TABLESPACE ".$this->options["DefaultTablespace"] : "")))
-			{
-				if($this->DoQuery("GRANT CREATE SESSION, CREATE TABLE,UNLIMITED TABLESPACE,CREATE SEQUENCE TO ".$this->user))
-					$success=1;
-				else
-				{
-					$error=$this->Error();
-					if(!$this->DoQuery("DROP USER ".$this->user." CASCADE"))
-						$error="could not setup the database user ($error) and then could drop its records (".$this->Error().")";
-					return($this->SetError("Create database",$error));
-				}
-			}
-		}
-		return($success);
+		$key=$this->auto_increment_sequence_prefix.$table.".NEXTVAL";
+		return(1);
 	}
 
-	Function DropDatabase($name)
+	Function GetInsertedKey($table,&$value)
 	{
-		if(!IsSet($this->options[$option="DBAUser"])
-		|| !IsSet($this->options[$option="DBAPassword"]))
-			return($this->SetError("Drop database","it was not specified the Oracle $option option"));
-		return($this->Connect($this->options["DBAUser"],$this->options["DBAPassword"],0)
-		&& $this->DoQuery("DROP USER ".$this->user." CASCADE"));
-	}
-
-	Function AlterTable($name,&$changes,$check)
-	{
-		if($check)
-		{
-			for($change=0,Reset($changes);$change<count($changes);Next($changes),$change++)
-			{
-				switch(Key($changes))
-				{
-					case "AddedFields":
-					case "RemovedFields":
-					case "ChangedFields":
-					case "name":
-						break;
-					case "RenamedFields":
-					default:
-						return($this->SetError("Alter table","change type \"".Key($changes)."\" not yet supported"));
-				}
-			}
-			return(1);
-		}
-		else
-		{
-			if(IsSet($changes["RemovedFields"]))
-			{
-				$query=" DROP (";
-				$fields=$changes["RemovedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-				{
-					if($field>0)
-						$query.=", ";
-					$query.=Key($fields);
-				}
-				$query.=")";
-				if(!$this->Query("ALTER TABLE $name $query"))
-					return(0);
-				$query="";
-			}
-			$query=(IsSet($changes["name"]) ? "RENAME TO ".$changes["name"] : "");
-			if(IsSet($changes["AddedFields"]))
-			{
-				$fields=$changes["AddedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-					$query.=" ADD (".$fields[Key($fields)]["Declaration"].")";
-			}
-			if(IsSet($changes["ChangedFields"]))
-			{
-				$fields=$changes["ChangedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-				{
-					$current_name=Key($fields);
-					if(IsSet($renamed_fields[$current_name]))
-					{
-						$field_name=$renamed_fields[$current_name];
-						UnSet($renamed_fields[$current_name]);
-					}
-					else
-						$field_name=$current_name;
-					$change="";
-					$change_type=$change_default=0;
-					if(IsSet($fields[$current_name]["type"]))
-						$change_type=$change_default=1;
-					if(IsSet($fields[$current_name]["length"]))
-						$change_type=1;
-					if(IsSet($fields[$current_name]["ChangedDefault"]))
-						$change_default=1;
-					if($change_type)
-						$change.=" ".$this->GetFieldTypeDeclaration($fields[$current_name]["Definition"]);
-					if($change_default)
-						$change.=" DEFAULT ".(IsSet($fields[$current_name]["Definition"]["default"]) ? $this->GetFieldValue($fields[$current_name]["Definition"]["type"],$fields[$current_name]["Definition"]["default"]) : "NULL");
-					if(IsSet($fields[$current_name]["ChangedNotNull"]))
-						$change.=(IsSet($fields[$current_name]["notnull"]) ? " NOT" : "")." NULL";
-					if(strcmp($change,""))
-						$query.=" MODIFY ($field_name$change)";
-				}
-			}
-			return($query=="" || $this->Query("ALTER TABLE $name $query"));
-		}
-	}
-
-	Function CreateSequence($name,$start)
-	{
-		return($this->Query("CREATE SEQUENCE $name START WITH $start INCREMENT BY 1".($start<1 ? " MINVALUE $start" : "")));
-	}
-
-	Function DropSequence($name)
-	{
-		return($this->Query("DROP SEQUENCE $name"));
+		return($this->QueryField("SELECT ".$this->auto_increment_sequence_prefix.$table.".CURRVAL FROM DUAL",$value,"integer"));
 	}
 
 	Function GetSequenceNextValue($name,&$value)
 	{
 		if(!$this->Connect($this->user,$this->password,$this->persistent))
 			return(0);
-		if(!($result=$this->DoQuery("SELECT $name.nextval FROM DUAL",0,0)))
+		if(!($result=$this->DoQuery("SELECT $name.NEXTVAL FROM DUAL",0,0)))
 			return(0);
 		if($this->NumberOfRows($result)==0)
 		{
@@ -858,6 +752,9 @@ class metabase_oci_class extends metabase_database_class
 		$this->supported["SelectRowRanges"]=
 		$this->supported["LOBs"]=
 		$this->supported["Replace"]=
+		$this->supported["AutoIncrement"]=
+		$this->supported["PrimaryKey"]=
+		$this->supported["OmitInsertKey"]=
 			1;
 		return("");
 	}

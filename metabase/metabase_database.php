@@ -2,7 +2,7 @@
 /*
  * metabase_database.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/metabase_database.php,v 1.1.1.1 2003/02/27 20:55:32 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/metabase_database.php,v 1.95 2005/11/17 21:15:51 mlemos Exp $
  *
  */
 
@@ -57,6 +57,52 @@ Function MetabaseParseConnectionArguments($connection,&$arguments)
 		}
 	}
 	return("");
+}
+
+Function MetabaseLoadClass($include,$include_path,$type)
+{
+	$separator="";
+	$directory_separator=(defined("DIRECTORY_SEPARATOR") ? DIRECTORY_SEPARATOR : "/");
+	$length=strlen($include_path);
+	if($length)
+	{
+		if($include_path[$length-1]!=$directory_separator)
+			$separator=$directory_separator;
+	}
+	if(file_exists($include_path.$separator.$include))
+	{
+		include($include_path.$separator.$include);
+		return("");
+	}
+	if(function_exists("ini_get")
+	&& strlen($php_include_paths=ini_get("include_path")))
+	{
+		$paths=explode((defined("PHP_OS") && !strcmp(substr(PHP_OS,0,3),"WIN")) ? ";" : ":",$php_include_paths);
+		for($path=0;$path<count($paths);$path++)
+		{
+			$php_include_path=$paths[$path];
+			$length=strlen($php_include_path);
+			if($length)
+			{
+				if($php_include_path[$length-1]!=$directory_separator)
+					$separator=$directory_separator;
+			}
+			if(file_exists($php_include_path.$separator.$include))
+			{
+				include($php_include_path.$separator.$include);
+				return("");
+			}
+		}
+	}
+	$directory=0;
+	if(strlen($include_path)==0
+	|| ($directory=@opendir($include_path)))
+	{
+		if($directory)
+			closedir($directory);
+		return("it was not specified an existing $type file ($include)".(strlen($include_path)==0 ? " and no Metabase IncludePath option was specified in the setup call" : ""));
+	}
+	return("it was not specified a valid $type include path");
 }
 
 Function MetabaseSetupInterface(&$arguments,&$db)
@@ -134,6 +180,11 @@ Function MetabaseSetupInterface(&$arguments,&$db)
 			$class_name="metabase_oci_class";
 			$included="METABASE_OCI_INCLUDED";
 			break;
+		case "sqlite";
+			$include="metabase_sqlite.php";
+			$class_name="metabase_sqlite_class";
+			$included="METABASE_SQLITE_INCLUDED";
+			break;
 		case "":
 			$included=(IsSet($arguments["IncludedConstant"]) ? $arguments["IncludedConstant"] : "");
 			if(!IsSet($arguments["Include"])
@@ -164,38 +215,16 @@ Function MetabaseSetupInterface(&$arguments,&$db)
 	if(strlen($included)
 	&& !defined($included))
 	{
-		if(!file_exists($include_path.$separator.$include))
-		{
-			$directory=0;
-			if(strlen($include_path)==0
-			|| ($directory=@opendir($include_path)))
-			{
-				if($directory)
-					closedir($directory);
-				return("it was not specified an existing DBMS driver file");
-			}
-			else
-				return("it was not specified a valid DBMS driver include path");
-		}
-		include($include_path.$separator.$include);
+		$error=MetabaseLoadClass($include,$include_path,"DBMS driver");
+		if(strlen($error))
+			return($error);
 	}
 	if(strlen($sub_included)
 	&& !defined($sub_included))
 	{
-		if(!file_exists($include_path.$separator.$sub_include))
-		{
-			$directory=0;
-			if(strlen($include_path)==0
-			|| ($directory=@opendir($include_path)))
-			{
-				if($directory)
-					closedir($directory);
-				return("it was not specified an existing DBMS sub driver file");
-			}
-			else
-				return("it was not specified a valid DBMS sub driver include path");
-		}
-		include($include_path.$separator.$sub_include);
+		$error=MetabaseLoadClass($sub_include,$include_path,"DBMS sub driver");
+		if(strlen($error))
+			return($error);
 	}
 	$db=new $class_name;
 	$db->include_path=$include_path;
@@ -304,7 +333,7 @@ class metabase_database_class
 	var $log_line_break="\n";
 
 	/* PRIVATE DATA */
-	
+
 	var $lobs=array();
 	var $clobs=array();
 	var $blobs=array();
@@ -360,7 +389,9 @@ class metabase_database_class
 
 	Function DebugOutput()
 	{
-		return($this->debug_output);
+		$output=$this->debug_output;
+		$this->debug_output="";
+		return($output);
 	}
 
 	Function SetDatabase($name)
@@ -409,29 +440,12 @@ class metabase_database_class
 		if(strlen($included_constant)==0
 		|| !defined($included_constant))
 		{
-			$include_path=$this->include_path;
-			$length=strlen($include_path);
-			$separator="";
-			if($length)
-			{
-				$directory_separator=(defined("DIRECTORY_SEPARATOR") ? DIRECTORY_SEPARATOR : "/");
-				if($include_path[$length-1]!=$directory_separator)
-					$separator=$directory_separator;
-			}
-			if(!file_exists($include_path.$separator.$include))
-			{
-				$directory=0;
-				if(!strcmp($include_path,"")
-				|| ($directory=@opendir($include_path)))
-				{
-					if($directory)
-						closedir($directory);
-					return($this->SetError($scope,"it was not specified an existing $extension file ($include)"));
-				}
-				else
-					return($this->SetError($scope,"it was not specified a valid $extension include path"));
-			}
-			include($include_path.$separator.$include);
+			$error=MetabaseLoadClass($include,$this->include_path,$extension);
+			if(strlen($error))
+				return($this->SetError($scope,$error));
+			if(strlen($included_constant)
+			&& !defined($included_constant))
+				return($this->SetError($scope,"it was not possible to load ".$extension." extension file ".$include." using path \"".$this->include_path."\""));
 		}
 		return(1);
 	}
@@ -480,11 +494,25 @@ class metabase_database_class
 		return($this->manager->CreateTable($this,$name,$fields));
 	}
 
+	Function CreateDetailedTable(&$table, $check)
+	{
+		if(!$this->LoadManager("Create detailed table"))
+			return(0);
+		return($this->manager->CreateDetailedTable($this,$table, $check));
+	}
+
 	Function DropTable($name)
 	{
 		if(!$this->LoadManager("Drop table"))
 			return(0);
 		return($this->manager->DropTable($this,$name));
+	}
+
+	Function DropDetailedTable(&$table, $check)
+	{
+		if(!$this->LoadManager("Create detailed table"))
+			return(0);
+		return($this->manager->DropDetailedTable($this,$table, $check));
 	}
 
 	Function AlterTable($name,&$changes,$check)
@@ -515,6 +543,20 @@ class metabase_database_class
 		return($this->manager->GetTableFieldDefinition($this,$table,$field,$definition));
 	}
 
+	Function ListTableKeys($table, $primary, &$keys)
+	{
+		if(!$this->LoadManager("List table keys"))
+			return(0);
+		return($this->manager->ListTableKeys($this, $table, $primary, $keys));
+	}
+
+	Function GetTableKeyDefinition($table, $key, $primary, &$definition)
+	{
+		if(!$this->LoadManager("Get table key definition"))
+			return(0);
+		return($this->manager->GetTableKeyDefinition($this, $table, $key, $primary, $definition));
+	}
+
 	Function ListTableIndexes($table,&$indexes)
 	{
 		if(!$this->LoadManager("List table indexes"))
@@ -527,6 +569,13 @@ class metabase_database_class
 		if(!$this->LoadManager("Get table index definition"))
 			return(0);
 		return($this->manager->GetTableIndexDefinition($this,$table,$index,$definition));
+	}
+
+	Function ListSequences(&$sequences)
+	{
+		if(!$this->LoadManager("List sequences"))
+			return(0);
+		return($this->manager->ListSequences($this,$sequences));
 	}
 
 	Function GetSequenceDefinition($sequence,&$definition)
@@ -576,11 +625,14 @@ class metabase_database_class
 		return($this->manager->GetSequenceCurrentValue($this,$name,$value));
 	}
 
-	Function ListSequences(&$sequences)
+	Function GetNextKey($table,&$key)
 	{
-		if(!$this->LoadManager("List sequences"))
-			return(0);
-		return($this->manager->ListSequences($this,$sequences));
+		return($this->SetError("Get next key","getting next table key is not supported"));
+	}
+
+	Function GetInsertedKey($table,&$value)
+	{
+		return($this->SetError("Get inserted key","getting last inserted table key is not supported"));
 	}
 
 	Function Query($query)
@@ -589,6 +641,40 @@ class metabase_database_class
 		return($this->SetError("Query","database queries are not implemented"));
 	}
 
+	Function GetTypedFieldValue($type,$value, &$sql, $scope)
+	{
+		switch($type)
+		{
+			case "text":
+				$sql=$this->GetTextFieldValue($value);
+				break;
+			case "boolean":
+				$sql=$this->GetBooleanFieldValue($value);
+				break;
+			case "integer":
+				$sql=strval($value);
+				break;
+			case "decimal":
+				$sql=$this->GetDecimalFieldValue($value);
+				break;
+			case "float":
+				$sql=$this->GetFloatFieldValue($value);
+				break;
+			case "date":
+				$sql=$this->GetDateFieldValue($value);
+				break;
+			case "time":
+				$sql=$this->GetTimeFieldValue($value);
+				break;
+			case "timestamp":
+				$sql=$this->GetTimestampFieldValue($value);
+				break;
+			default:
+				return($this->SetError($scope,$type." is not a supported field type"));
+		}
+		return(1);
+	}
+	
 	Function Replace($table,&$fields)
 	{
 		if(!$this->supported["Replace"])
@@ -612,35 +698,8 @@ class metabase_database_class
 			{
 				if(!IsSet($fields[$name]["Value"]))
 					return($this->SetError("Replace","it was not specified a value for the $name field"));
-				switch(IsSet($fields[$name]["Type"]) ? $fields[$name]["Type"] : "text")
-				{
-					case "text":
-						$value=$this->GetTextFieldValue($fields[$name]["Value"]);
-						break;
-					case "boolean":
-						$value=$this->GetBooleanFieldValue($fields[$name]["Value"]);
-						break;
-					case "integer":
-						$value=strval($fields[$name]["Value"]);
-						break;
-					case "decimal":
-						$value=$this->GetDecimalFieldValue($fields[$name]["Value"]);
-						break;
-					case "float":
-						$value=$this->GetFloatFieldValue($fields[$name]["Value"]);
-						break;
-					case "date":
-						$value=$this->GetDateFieldValue($fields[$name]["Value"]);
-						break;
-					case "time":
-						$value=$this->GetTimeFieldValue($fields[$name]["Value"]);
-						break;
-					case "timestamp":
-						$value=$this->GetTimestampFieldValue($fields[$name]["Value"]);
-						break;
-					default:
-						return($this->SetError("Replace","it was not specified a supported type for the $name field"));
-				}
+				if(!$this->GetTypedFieldValue(IsSet($fields[$name]["Type"]) ? $fields[$name]["Type"] : "text", $fields[$name]["Value"], $value, "Replace"))
+					return(0);
 			}
 			$update.="=".$value;
 			$values.=$value;
@@ -800,6 +859,11 @@ class metabase_database_class
 						}
 						$query.=$this->blobs[$prepared_query][$position+1];
 						break;
+					case "key":
+						if(!($success=$this->GetNextKey($value, $key)))
+							break;
+						$query.=$key;
+						break;
 					default:
 						$query.=$value;
 						break;
@@ -902,6 +966,11 @@ class metabase_database_class
 	Function QuerySetDecimal($prepared_query,$parameter,$value)
 	{
 		return($this->QuerySet($prepared_query,$parameter,"decimal",$this->GetDecimalFieldValue($value)));
+	}
+
+	Function QuerySetKey($prepared_query,$parameter,$table)
+	{
+		return($this->QuerySet($prepared_query,$parameter,"key",$table));
 	}
 
 	Function AffectedRows(&$affected_rows)

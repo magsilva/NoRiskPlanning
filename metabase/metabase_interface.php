@@ -1,8 +1,8 @@
-<?
+<?php
 /*
  * metabase_interface.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/metabase_interface.php,v 1.1.1.1 2003/02/27 20:55:33 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/metabase_interface.php,v 1.72 2005/09/06 01:59:34 mlemos Exp $
  *
  */
 
@@ -166,6 +166,13 @@ Function MetabaseQuerySetDecimal($database,$prepared_query,$parameter,$value)
 	global $metabase_databases;
 
 	return($metabase_databases[$database]->QuerySetDecimal($prepared_query,$parameter,$value));
+}
+
+Function MetabaseQuerySetKey($database,$prepared_query,$parameter,$table)
+{
+	global $metabase_databases;
+
+	return($metabase_databases[$database]->QuerySetKey($prepared_query,$parameter,$table));
 }
 
 Function MetabaseAffectedRows($database,&$affected_rows)
@@ -504,11 +511,25 @@ Function MetabaseCreateTable($database,$name,&$fields)
 	return($metabase_databases[$database]->CreateTable($name,$fields));
 }
 
+Function MetabaseCreateDetailedTable($database,&$table,$check)
+{
+	global $metabase_databases;
+
+	return($metabase_databases[$database]->CreateDetailedTable($table,$check));
+}
+
 Function MetabaseDropTable($database,$name)
 {
 	global $metabase_databases;
 
 	return($metabase_databases[$database]->DropTable($name));
+}
+
+Function MetabaseDropDetailedTable($database,&$table,$check)
+{
+	global $metabase_databases;
+
+	return($metabase_databases[$database]->DropDetailedTable($table,$check));
 }
 
 Function MetabaseAlterTable($database,$name,&$changes,$check=0)
@@ -537,6 +558,20 @@ Function MetabaseGetTableFieldDefinition($database,$table,$field,&$definition)
 	global $metabase_databases;
 
 	return($metabase_databases[$database]->GetTableFieldDefinition($table,$field,$definition));
+}
+
+Function MetabaseListTableKeys($database, $table, $primary, &$keys)
+{
+	global $metabase_databases;
+
+	return($metabase_databases[$database]->ListTableKeys($table, $primary, $keys));
+}
+
+Function MetabaseGetTableKeyDefinition($database, $table, $key, $primary, &$definition)
+{
+	global $metabase_databases;
+
+	return($metabase_databases[$database]->GetTableKeyDefinition($table, $key, $primary, $definition));
 }
 
 Function MetabaseListTableIndexes($database,$table,&$indexes)
@@ -593,6 +628,20 @@ Function MetabaseGetSequenceCurrentValue($database,$name,&$value)
 	global $metabase_databases;
 
 	return($metabase_databases[$database]->GetSequenceCurrentValue($name,$value));
+}
+
+Function MetabaseGetNextKey($database,$table,&$key)
+{
+	global $metabase_databases;
+
+	return($metabase_databases[$database]->GetNextKey($table,$key));
+}
+
+Function MetabaseGetInsertedKey($database,$table,&$value)
+{
+	global $metabase_databases;
+
+	return($metabase_databases[$database]->GetInsertedKey($table,$value));
 }
 
 Function MetabaseAutoCommitTransactions($database,$auto_commit)

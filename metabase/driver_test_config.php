@@ -1,14 +1,13 @@
-
-<?
+<?php
 /*
  * driver_test_configuration.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/driver_test_config.php,v 1.1.1.1 2003/02/27 20:55:09 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/driver_test_config.php,v 1.9 2002/12/23 02:18:09 mlemos Exp $
  *
  */
 
 	$driver_arguments["Type"]="mysql";
-	$driver_arguments["DontCaptureDebug"]=1;
+	$driver_arguments["CaptureDebug"]=1;
 	$driver_arguments["Persistent"]=0;
 	$driver_arguments["LogLineBreak"]="\n";
 	$driver_arguments["Options"]=array(
@@ -48,10 +47,10 @@
 			);
 			break;
 		case "mysql":
-			$driver_arguments["Host"]="localhost";
-			$driver_arguments["User"]="apfreire";
-			$driver_arguments["Password"]="NRPdev4";
-			$driver_arguments["Options"]["UseTransactions"]=0;
+			$driver_arguments["User"]="root";
+			$driver_arguments["Options"]["UseTransactions"]=1;
+			$driver_arguments["Options"]["DefaultTableType"]="INNODB";
+			$driver_arguments["Options"]["Port"]="/var/lib/mysql/mysql.sock";
 			break;
 		case "oci":
 			$driver_arguments["User"]="drivertest";
@@ -64,7 +63,7 @@
 			);
 			break;
 		case "odbc":
-			$driver_arguments["User"]="webuser";
+ 			$driver_arguments["User"]="webuser";
 			$driver_arguments["Password"]="webuser_password";
 			$driver_arguments["Options"]=array(
 				"DBADSN"=>"dbadsn",
@@ -73,6 +72,17 @@
 				"UseDefaultValues"=>0,
 				"UseDecimalScale"=>0,
 				"UseTransactions"=>0
+			);
+			$database_variables["create"]="0";
+			$database_variables["name"]="userdsn";
+			break;
+		case "odbc-msaccess":
+			$driver_arguments["User"]="webuser";
+			$driver_arguments["Password"]="webuser_password";
+			$driver_arguments["Options"]=array(
+				"DBADSN"=>"dbadsn",
+				"DBAUser"=>"dbauser",
+				"DBAPassword"=>"dbapassword"
 			);
 			$database_variables["create"]="0";
 			$database_variables["name"]="userdsn";

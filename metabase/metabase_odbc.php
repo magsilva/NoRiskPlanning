@@ -1,4 +1,4 @@
-<?
+<?php
 if(!defined("METABASE_ODBC_INCLUDED"))
 {
 	define("METABASE_ODBC_INCLUDED",1);
@@ -6,7 +6,7 @@ if(!defined("METABASE_ODBC_INCLUDED"))
 /*
  * metabase_odbc.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/metabase_odbc.php,v 1.1.1.1 2003/02/27 20:55:34 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/metabase_odbc.php,v 1.31 2004/07/27 06:26:03 mlemos Exp $
  *
  */
 
@@ -54,6 +54,7 @@ class metabase_odbc_class extends metabase_database_class
 	var $size_field="COLUMN_SIZE";
 	var $support_defaults=1;
 	var $support_decimal_scale=1;
+	var $get_type_info=1;
 	var $escape_quotes="'";
 	var $blob_declaration="";
 	var $clob_declaration="";
@@ -114,7 +115,8 @@ class metabase_odbc_class extends metabase_database_class
 		$this->type_field_names=array();
 		$this->type_index=array();
 		$this->type_property_names=array();
-		if(function_exists("odbc_gettypeinfo"))
+		if($this->get_type_info
+		&& function_exists("odbc_gettypeinfo"))
 		{
 			if(!($this->types_result=odbc_gettypeinfo($this->connection)))
 			{
@@ -144,7 +146,8 @@ class metabase_odbc_class extends metabase_database_class
 					$this->type_index[$type]=$type_index;
 			}
 			Unset($this->supported_types[$type_index]);
-			odbc_free_result($this->types_result);
+			if(IsSet($this->options["FreeTypesResult"]))
+				odbc_free_result($this->types_result);
 			$this->types_result=0;
 		}
 		if(!$this->auto_commit
@@ -209,9 +212,9 @@ class metabase_odbc_class extends metabase_database_class
 		&& IsSet($this->query_parameters[$prepared_query])
 		&& count($this->query_parameters[$prepared_query]))
 		{
-			if(($result=odbc_prepare($this->connection,$query)))
+			if(($result=@odbc_prepare($this->connection,$query)))
 			{
-				if(!odbc_execute($result,$this->query_parameters[$prepared_query]))
+				if(!@odbc_execute($result,$this->query_parameters[$prepared_query]))
 				{
 					$this->SetODBCError("Do query","Could not execute a ODBC database prepared query \"$query\"",$php_errormsg);
 					odbc_free_result($result);
@@ -229,7 +232,7 @@ class metabase_odbc_class extends metabase_database_class
 		if($result)
 		{
 			$this->current_row[$result]=-1;
-			if(substr(strtolower(ltrim($query)),0,strlen("select"))=="select")
+			if(!strcmp(strtolower(strtok(ltrim($query)," \t\n\r")),"select"))
 			{
 				$result_value=intval($result);
 				$this->current_row[$result_value]=-1;
@@ -415,7 +418,7 @@ class metabase_odbc_class extends metabase_database_class
 		|| !$this->FetchRow($result,$row))
 			return(0);
 		$this->highest_fetched_row[$result_value]=max($this->highest_fetched_row[$result_value],$row);
-		return(!strcmp($this->results[$result_value][$row][$column],""));
+		return(!IsSet($this->results[$result_value][$row][$column]));
 	}
 
 	Function ConvertResult(&$value,$type)
@@ -504,7 +507,7 @@ class metabase_odbc_class extends metabase_database_class
 		UnSet($this->results[$result_value]);
 		UnSet($this->columns[$result_value]);
 		UnSet($this->rows[$result_value]);
-		UnSet($this->result_types[$result]);
+		UnSet($this->result_types[$result_value]);
 		return(odbc_free_result($result));
 	}
 
@@ -814,12 +817,11 @@ class metabase_odbc_class extends metabase_database_class
 	{
 		if(((!$this->auto_commit)==(!$auto_commit)))
 			return(1);
-		if(!IsSet($this->options["UseTransactions"])
-		|| !$this->options["UseTransactions"])
-			return($this->SetError("Auto-commit transactions","it was not specified a setup option that indicates that transactions can be used"));
+		if(!IsSet($this->supported["Transactions"]))
+			return($this->SetError("Auto-commit transactions","transactions are not supported"));
 		if($this->connection
 		&& !@odbc_autocommit($this->connection,$auto_commit))
-			return($this->SetODBCError("Auto-commit transactions","Could not set transaction auto-commit mode",$php_errormsg));
+			return($this->SetODBCError("Auto-commit transactions","Could not set transaction auto-commit mode to $auto_commit",$php_errormsg));
 		$this->auto_commit=$auto_commit;
 		return(1);
 	}
@@ -828,9 +830,6 @@ class metabase_odbc_class extends metabase_database_class
 	{
 		if($this->auto_commit)
 			return($this->SetError("Commit transaction","transaction changes are being auto commited"));
-		if(!IsSet($this->options["UseTransactions"])
-		|| !$this->options["UseTransactions"])
-			return($this->SetError("Commit transaction","it was not specified a setup option that indicates that transactions can be used"));
 		if(!odbc_commit($this->connection))
 			return($this->SetODBCError("Commit transaction","Could not commit the current transaction",$php_errormsg));
 		return(1);
@@ -840,21 +839,47 @@ class metabase_odbc_class extends metabase_database_class
 	{
 		if($this->auto_commit)
 			return($this->SetError("Rollback transaction","transactions can not be rolled back when changes are auto commited"));
-		if(!IsSet($this->options["UseTransactions"])
-		|| !$this->options["UseTransactions"])
-			return($this->SetError("Rollback transaction","it was not specified a setup option that indicates that transactions can be used"));
-		if(!odbc_rollback($this->connection))
+		if(!@odbc_rollback($this->connection))
 			return($this->SetODBCError("Rollback transaction","Could not rollback the current transaction",$php_errormsg));
 		return(1);
 	}
 
+	Function SetupODBCLOBs()
+	{
+		$current_dba_access=$this->dba_access;
+		$current_auto_commit=$this->auto_commit;
+		$this->dba_access=1;
+		$success=$this->Connect();
+		$this->dba_access=$current_dba_access;
+		$this->auto_commit=$current_auto_commit;
+		if(!$success)
+			return($this->Error());
+		if(IsSet($this->type_index[$binary=METABASE_ODBC_LONGVARBINARY_TYPE])
+		|| IsSet($this->type_index[$binary=METABASE_ODBC_VARBINARY_TYPE]))
+		{
+			$type=$this->type_property_names["TYPE_NAME"];
+			$this->blob_declaration=$this->supported_types[$this->type_index[$binary]][$type];
+			if(IsSet($this->type_index[$text=METABASE_ODBC_LONGVARCHAR_TYPE])
+			|| IsSet($this->type_index[$text=METABASE_ODBC_VARCHAR_TYPE]))
+				$this->clob_declaration=$this->supported_types[$this->type_index[$text]][$type];
+			else
+				$this->clob_declaration=$this->blob_declaration;
+			$this->supported["LOBs"]=1;
+		}
+		else
+			$this->blob_declaration=$this->clob_declaration="";
+		return(1);		
+	}
+
 	Function SetupODBC()
 	{
-		return(1);
+		return($this->SetupODBCLOBs());
 	}
 
 	Function Setup()
 	{
+		$version=explode(".",function_exists("phpversion") ? phpversion() : "3.0.7");
+		$this->php_version=$version[0]*1000000+$version[1]*1000+$version[2];
 		$this->supported["AffectedRows"]=
 		$this->supported["SelectRowRanges"]=
 			1;
@@ -866,27 +891,6 @@ class metabase_odbc_class extends metabase_database_class
 			$this->supported["Transactions"]=$this->supported["Replace"]=1;
 		$this->support_defaults=(!IsSet($this->options["UseDefaultValues"]) || $this->options["UseDefaultValues"]);
 		$this->support_decimal_scale=(!IsSet($this->options["UseDecimalScale"]) || $this->options["UseDecimalScale"]);
-		$version=explode(".",function_exists("phpversion") ? phpversion() : "3.0.7");
-		$this->php_version=$version[0]*1000000+$version[1]*1000+$version[2];
-		$current_dba_access=$this->dba_access;
-		$current_auto_commit=$this->auto_commit;
-		$this->dba_access=1;
-		$success=$this->Connect();
-		$this->dba_access=$current_dba_access;
-		$this->auto_commit=$current_auto_commit;
-		if(!$success)
-			return($this->Error());
-		if(IsSet($this->type_index[METABASE_ODBC_LONGVARBINARY_TYPE]))
-		{
-			$this->blob_declaration=$this->supported_types[$this->type_index[METABASE_ODBC_LONGVARBINARY_TYPE]][$this->type_property_names["TYPE_NAME"]];
-			if(IsSet($this->type_index[METABASE_ODBC_LONGVARCHAR_TYPE]))
-				$this->clob_declaration=$this->supported_types[$this->type_index[METABASE_ODBC_LONGVARCHAR_TYPE]][$this->type_property_names["TYPE_NAME"]];
-			else
-				$this->blob_declaration=$this->clob_declaration;
-			$this->supported["LOBs"]=1;
-		}
-		else
-			$this->blob_declaration=$this->clob_declaration="";
 		if(!$this->SetupODBC())
 		{
 			$this->Close();

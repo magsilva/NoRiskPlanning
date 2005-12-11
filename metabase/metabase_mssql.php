@@ -1,4 +1,4 @@
-<?
+<?php
 if(!defined("METABASE_MSSQL_INCLUDED"))
 {
 	define("METABASE_MSSQL_INCLUDED",1);
@@ -6,7 +6,7 @@ if(!defined("METABASE_MSSQL_INCLUDED"))
 /*
  * metabase_mssql.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/metabase_mssql.php,v 1.1.1.1 2003/02/27 20:55:34 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/metabase_mssql.php,v 1.25 2005/09/19 06:05:04 mlemos Exp $
  *
  */
  
@@ -24,6 +24,16 @@ class metabase_mssql_class extends metabase_database_class
 	var $highest_fetched_row=array();
 	var $ranges=array();
 	var $escape_quotes="'";
+	var $manager_included_constant="METABASE_MANAGER_MSSQL_INCLUDED";
+	var $manager_include="manager_mssql.php";
+	var $manager_class_name="metabase_manager_mssql_class";
+	var $select_queries=array(
+		"select"=>"",
+		"exec"=>"",
+		"execute"=>""
+	);
+	var $auto_increment_table="";
+	var $auto_increment_mark="#ai#";
 
 	Function SetMSSQLError($scope,$error)
 	{
@@ -47,73 +57,6 @@ class metabase_mssql_class extends metabase_database_class
 			mssql_close($this->connection);
 			$this->connection=0;
 			$this->affected_rows=$this->current_row=-1;
-		}
-	}
-
-	Function StandaloneQuery($query)
-	{
-		if(!function_exists("mssql_connect"))
-			return($this->SetError("Standalone query","Microsoft SQL server support is not available in this PHP configuration"));
-		if(($connection=mssql_connect($this->host,$this->user,$this->password))==0)
-			return($this->SetMSSQLError("Standalone query","Could not connect to the Microsoft SQL server"));
-		if(!($success=@mssql_query($query,$connection)))
-			$this->SetMSSQLError("Standalone query","Could not query a Microsoft SQL server");
-		mssql_close($connection);
-		return($success);
-	}
-
-	Function CreateDatabase($name)
-	{
-		return($this->StandaloneQuery("CREATE DATABASE $name ON ".(IsSet($this->options["DatabaseDevice"]) ? $this->options["DatabaseDevice"] : "DEFAULT").(IsSet($this->options["DatabaseSize"]) ? "=".$this->options["DatabaseSize"] : "")));
-	}
-
-	Function DropDatabase($name)
-	{
-		return($this->StandaloneQuery("DROP DATABASE $name"));
-	}
-
-	Function AlterTable($name,&$changes,$check)
-	{
-		if($check)
-		{
-			for($change=0,Reset($changes);$change<count($changes);Next($changes),$change++)
-			{
-				switch(Key($changes))
-				{
-					case "AddedFields":
-						break;
-					case "RemovedFields":
-					case "name":
-					case "RenamedFields":
-					case "ChangedFields":
-					default:
-						return($this->SetError("Alter table","change type \"".Key($changes)."\" not yet supported"));
-				}
-			}
-			return(1);
-		}
-		else
-		{
-			if(IsSet($changes[$change="RemovedFields"])
-			|| IsSet($changes[$change="name"])
-			|| IsSet($changes[$change="RenamedFields"])
-			|| IsSet($changes[$change="ChangedFields"]))
-				return($this->SetError("Alter table","change type \"$change\" is not supported by the server"));
-			$query="";
-			if(IsSet($changes["AddedFields"]))
-			{
-				if(strcmp($query,""))
-					$query.=", ";
-				$query.="ADD ";
-				$fields=$changes["AddedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-				{
-					if(strcmp($query,""))
-						$query.=", ";
-					$query.=$fields[Key($fields)]["Declaration"];
-				}
-			}
-			return(strcmp($query,"") ? $this->Query("ALTER TABLE $name $query") : 1);
 		}
 	}
 
@@ -182,9 +125,8 @@ class metabase_mssql_class extends metabase_database_class
 		$this->first_selected_row=$this->selected_row_limit=0;
 		if(!$this->SelectDatabase())
 			return(0);
-		if(GetType($space=strpos($query_command=strtolower(ltrim($query))," "))=="integer")
-			$query_command=substr($query_command,0,$space);
-		if(($select=($query_command=="select" || $query_command=="exec" || $query_command=="execute"))
+		$query_string=strtolower(strtok(ltrim($query)," \t\n\r"));
+		if(($select=IsSet($this->select_queries[$query_string]))
 		&& $limit>0)
 		{
 			$result=0;
@@ -217,7 +159,48 @@ class metabase_mssql_class extends metabase_database_class
 			}
 		}
 		else
+		{
+			if(!strcmp($query_string,"insert")
+			&& strlen($this->auto_increment_table))
+			{
+				$auto_increment_table=$this->auto_increment_table;
+				$this->auto_increment_table="";
+				$table='\\S+';
+				$column='[^ \t\n\r,]+';
+				$quoted='\'(?:\'\'|[^\'])*\'';
+				$number='[0-9]+(?:\\.[0-9]+)?(?:e[-+]?[0-9]+)?';
+				$binary='0x(?:[0-9a-f]{2})*';
+				$value=$this->auto_increment_mark.'|null|(?:'.$quoted.')|(?:'.$number.')|(?:'.$binary.')';
+				$insert='/^\\s*insert\\s+into\\s+('.$table.')\\s+\\(\\s*('.$column.'(?:\\s*,\\s*'.$column.')*)\\s*\\)\\s*values\\s*\\(\\s*((?:'.$value.')(?:\\s*,\\s*(?:'.$value.'))*)\\s*\\)\\s*$/si';
+				if(!preg_match($insert, $query, $m))
+					return($this->SetError("Query","it was executed an INSERT query with an invalid or unsupported syntax: ".$query));
+				if(strcmp($auto_increment_table, $m[1]))
+					return($this->SetError("Query","the INSERT query table \"".$m[1]."\" does not match the previously retrieved auto-increment key table \"".$this->auto_increment_table."\""));
+				$values='/^('.$value.')\\s*(?:,\\s*)?/i';
+				$v=$m[3];
+				$columns='/^('.$column.')\\s*(?:,\\s*)?/i';
+				$c=$m[2];
+				for($ov=$oc=0;$ov<strlen($v);)
+				{
+					if(!preg_match($columns, substr($c,$oc), $mc))
+						return($this->SetError("Query","there is a bug in retrieving the column names of the INSERT query: ".$query));
+					if(!preg_match($values, substr($v,$ov), $mv))
+						return($this->SetError("Query","there is a bug in retrieving the column values of the INSERT query: ".$query));
+					if(!strcmp($mv[1],$this->auto_increment_mark))
+					{
+						$new_values=substr($v,0,$ov).substr($v,$ov+strlen($mv[0]));
+						$query="INSERT INTO ".$m[1].(strlen($new_values) ? " (".substr($c,0,$oc).substr($c,$oc+strlen($mc[0])).") VALUES (".$new_values.")" : " DEFAULT VALUES");;
+						$this->Debug("Rewritten query: ".$query);
+						break;
+					}
+					$oc+=strlen($mc[0]);
+					$ov+=strlen($mv[0]);
+				}
+				if($ov>=strlen($v))
+					return($this->SetError("Query","the auto-increment key value is not being used in the INSERT query ".$query));
+			}
 			$result=$this->DoQuery($query);
+		}
 		if($result)
 		{
 			if($select)
@@ -423,7 +406,7 @@ class metabase_mssql_class extends metabase_database_class
 	{
 		if(IsSet($field["unsigned"]))
 			$this->warning="unsigned integer field \"$name\" is being declared as signed integer";
-		return("$name INT".(IsSet($field["default"]) ? " DEFAULT ".$field["default"] : "").(IsSet($field["notnull"]) ? " NOT NULL" : " NULL"));
+		return("$name INT".(IsSet($field["autoincrement"]) ? " IDENTITY(1, 1)" : (IsSet($field["default"]) ? " DEFAULT ".$field["default"] : "")).(IsSet($field["notnull"]) ? " NOT NULL" : " NULL"));
 	}
 
 	Function GetTextFieldTypeDeclaration($name,&$field)
@@ -546,16 +529,6 @@ class metabase_mssql_class extends metabase_database_class
 		return(!strcmp($value,"NULL") ? "NULL" : "$value");
 	}
 
-	Function CreateSequence($name,$start)
-	{
-		return($this->Query("CREATE TABLE _sequence_$name (sequence INT NOT NULL IDENTITY($start,1) PRIMARY KEY CLUSTERED)"));
-	}
-
-	Function DropSequence($name)
-	{
-		return($this->Query("DROP TABLE _sequence_$name"));
-	}
-
 	Function GetSequenceNextValue($name,&$value)
 	{
 		if(!$this->Query("INSERT INTO _sequence_$name DEFAULT VALUES")
@@ -565,6 +538,22 @@ class metabase_mssql_class extends metabase_database_class
 		$this->FreeResult($result);
 		if(!$this->Query("DELETE FROM _sequence_$name WHERE sequence<$value"))
 			$this->warning="could delete previous sequence table values";
+		return(1);
+	}
+
+	Function GetNextKey($table,&$key)
+	{
+		$this->auto_increment_table=$table;
+		$key=$this->auto_increment_mark;
+		return(1);
+	}
+
+	Function GetInsertedKey($table,&$value)
+	{
+		if(!($result=$this->Query("SELECT @@IDENTITY FROM ".$table)))
+			return(0);
+		$value=intval($this->FetchResult($result,0,0));
+		$this->FreeResult($result);
 		return(1);
 	}
 
@@ -609,6 +598,9 @@ class metabase_mssql_class extends metabase_database_class
 		$this->supported["SelectRowRanges"]=
 		$this->supported["LOBs"]=
 		$this->supported["Replace"]=
+		$this->supported["AutoIncrement"]=
+		$this->supported["PrimaryKey"]=
+		$this->supported["OmitInsertKey"]=
 			1;
 		return("");
 	}

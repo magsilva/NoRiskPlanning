@@ -1,4 +1,4 @@
-<?
+<?php
 if(!defined("METABASE_MANAGER_DATABASE_INCLUDED"))
 {
 	define("METABASE_MANAGER_DATABASE_INCLUDED",1);
@@ -6,7 +6,7 @@ if(!defined("METABASE_MANAGER_DATABASE_INCLUDED"))
 /*
  * manager_database.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/manager_database.php,v 1.1.1.1 2003/02/27 20:55:09 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/manager_database.php,v 1.9 2005/09/19 05:57:37 mlemos Exp $
  *
  */
 
@@ -21,6 +21,9 @@ class metabase_manager_database_class
 		switch($field["type"])
 		{
 			case "integer":
+				if(IsSet($field["autoincrement"])
+				&& !$db->Support("AutoIncrement"))
+					return($db->SetError("Get field","this database driver does not support creating tables with autoincrement fields"));
 				$query=$db->GetIntegerFieldTypeDeclaration($field_name,$field);
 				break;
 			case "text":
@@ -56,17 +59,66 @@ class metabase_manager_database_class
 		return(1);
 	}
 
-	Function GetFieldList(&$db,&$fields,&$query_fields)
+	Function GetFieldList(&$db,&$fields,&$sql)
 	{
-		for($query_fields="",Reset($fields),$field_number=0;$field_number<count($fields);$field_number++,Next($fields))
+		for($sql="", Reset($fields),$field_number=0;$field_number<count($fields);$field_number++,Next($fields))
 		{
 			if($field_number>0)
-				$query_fields.=",";
+				$sql.=", ";
 			$field_name=Key($fields);
 			if(!$this->GetField($db,$fields[$field_name],$field_name,$query))
 				return(0);
-			$query_fields.=$query;
+			$sql.=$query;
 		}
+		return(1);
+	}
+
+	Function GetPrimaryKeyDeclaration(&$db,&$key,&$sql)
+	{
+		if(!$db->Support("PrimaryKey"))
+			return($db->SetError("Get primary key declaration","this database driver does not support creating tables with primary keys"));
+		for($sql="PRIMARY KEY (", Reset($key["FIELDS"]),$field_number=0;$field_number<count($key["FIELDS"]);$field_number++,Next($key["FIELDS"]))
+		{
+			if($field_number>0)
+				$sql.=", ";
+			$field_name=Key($key["FIELDS"]);
+			$sql.=$field_name;
+		}
+		$sql.=")";
+		return(1);
+	}
+
+	Function GetTableFieldsAndOptions(&$db,&$table,&$sql,&$options)
+	{
+		$options="";
+		if(!$this->GetFieldList($db,$table["FIELDS"],$sql))
+			return(0);
+		if(IsSet($table["PRIMARYKEY"]))
+		{
+			if(!$this->GetPrimaryKeyDeclaration($db,$table["PRIMARYKEY"],$key))
+				return(0);
+			$sql.=", ".$key;
+		}
+		return(1);
+	}
+
+	Function BeforeCreateTable(&$db, &$table, $check, &$sql)
+	{
+		return(1);
+	}
+
+	Function AfterCreateTable(&$db, &$table, $check, &$sql)
+	{
+		return(1);
+	}
+
+	Function BeforeDropTable(&$db, &$table, $check, &$sql)
+	{
+		return(1);
+	}
+
+	Function AfterDropTable(&$db, &$table, $check, &$sql)
+	{
 		return(1);
 	}
 
@@ -84,20 +136,65 @@ class metabase_manager_database_class
 
 	Function CreateTable(&$db,$name,&$fields)
 	{
-		if(!IsSet($name)
-		|| !strcmp($name,""))
-			return($db->SetError("Create table","it was not specified a valid table name"));
-		if(count($fields)==0)
-			return($db->SetError("Create table","it were not specified any fields for table \"$name\""));
+		$table=array("name"=>$name, "FIELDS"=>$fields);
+		return($this->CreateDetailedTable($db, $table, 0));
+	}
+
+	Function CreateDetailedTable(&$db, &$table, $check)
+	{
+		if(!IsSet($table["name"])
+		|| strlen($name=$table["name"])==0)
+			return($db->SetError("Create detailed table","it was not specified a valid table name"));
+		if(!IsSet($table["FIELDS"])
+		|| count($table["FIELDS"])==0)
+			return($db->SetError("Create detailed table","it were not specified any fields for table \"$name\""));
+		$sql=array();
 		$query_fields="";
-		if(!$this->GetFieldList($db,$fields,$query_fields))
+		if(!$this->GetTableFieldsAndOptions($db,$table,$fields,$options))
 			return(0);
-		return($db->Query("CREATE TABLE $name ($query_fields)"));
+		if(!$this->BeforeCreateTable($db, $table, $check, $sql))
+			return(0);
+		$sql[]="CREATE TABLE ".$name." (".$fields.")".$options;
+		if(!$this->AfterCreateTable($db, $table, $check, $sql))
+			return(0);
+		if(IsSet($table["SQL"]))
+			$table["SQL"]=$sql;
+		if(!$check)
+		{
+			for($statement=0;$statement<count($sql);$statement++)
+			{
+				if(!$db->Query($sql[$statement]))
+					return(0);
+			}
+		}
+		return(1);
 	}
 
 	Function DropTable(&$db,$name)
 	{
-		return($db->Query("DROP TABLE $name"));
+		$table=array("name"=>$name);
+		return($this->DropDetailedTable($db, $table, 0));
+	}
+
+	Function DropDetailedTable(&$db, $table, $check)
+	{
+		$sql=array();
+		if(!$this->BeforeDropTable($db, $table, $check, $sql))
+			return(0);
+		$sql[]="DROP TABLE ".$table["name"];
+		if(IsSet($table["SQL"]))
+			$table["SQL"]=$sql;
+		if(!$this->AfterDropTable($db, $table, $check, $sql))
+			return(0);
+		if(!$check)
+		{
+			for($statement=0;$statement<count($sql);$statement++)
+			{
+				if(!$db->Query($sql[$statement]))
+					return(0);
+			}
+		}
+		return(1);
 	}
 
 	Function AlterTable(&$db,$name,&$changes,$check)
@@ -118,6 +215,16 @@ class metabase_manager_database_class
 	Function GetTableFieldDefinition(&$db,$table,$field,&$definition)
 	{
 		return($db->SetError("Get table field definition","get table field definition is not supported"));
+	}
+
+	Function ListTableKeys(&$db, $table, $primary, &$keys)
+	{
+		return($db->SetError("List table keys","list table keys is not supported"));
+	}
+
+	Function GetTableKeyDefinition(&$db, $table, $key, $primary, &$definition)
+	{
+		return($db->SetError("Get table key definition","get table key definition is not supported"));
 	}
 
 	Function ListTableIndexes(&$db,$table,&$indexes)

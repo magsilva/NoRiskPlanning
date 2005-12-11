@@ -1,4 +1,4 @@
-<?
+<?php
 if(!defined("METABASE_MYSQL_INCLUDED"))
 {
 	define("METABASE_MYSQL_INCLUDED",1);
@@ -6,7 +6,7 @@ if(!defined("METABASE_MYSQL_INCLUDED"))
 /*
  * metabase_mysql.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/metabase_mysql.php,v 1.1.1.1 2003/02/27 20:55:34 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/metabase_mysql.php,v 1.78 2005/11/21 20:51:57 mlemos Exp $
  *
  */
  
@@ -19,6 +19,7 @@ class metabase_mysql_class extends metabase_database_class
 	var $connected_port;
 	var $opened_persistent="";
 	var $decimal_factor=1.0;
+	var $emulate_decimal=0;
 	var $highest_fetched_row=array();
 	var $columns=array();
 	var $fixed_float=0;
@@ -29,6 +30,15 @@ class metabase_mysql_class extends metabase_database_class
 	var $manager_include="manager_mysql.php";
 	var $manager_included_constant="METABASE_MANAGER_MYSQL_INCLUDED";
 	var $default_table_type="";
+	var $select_queries=array(
+		"select"=>"",
+		"show"=>"",
+		"check"=>"",
+		"repair"=>"",
+		"analyze"=>"",
+		"optimize"=>"",
+		"explain"=>""
+	);
 
 	Function Connect()
 	{
@@ -113,16 +123,26 @@ class metabase_mysql_class extends metabase_database_class
 			return($this->SetError("Query","it was not specified a valid database name to select"));
 		if(!$this->Connect())
 			return(0);
-		if(GetType($space=strpos($query_string=strtolower(ltrim($query))," "))=="integer")
-			$query_string=substr($query_string,0,$space);
-		if(($select=($query_string=="select" || $query_string=="show"))
+		$query_string=strtolower(strtok(ltrim($query)," \t\n\r"));
+		if(($select=IsSet($this->select_queries[$query_string]))
 		&& $limit>0)
 			$query.=" LIMIT $first,$limit";
 		if(mysql_select_db($this->database_name,$this->connection)
 		&& ($result=mysql_query($query,$this->connection)))
 		{
 			if($select)
-				$this->highest_fetched_row[$result]=-1;
+			{
+				switch(GetType($result))
+				{
+					case "resource":
+					case "integer":
+						$this->highest_fetched_row[$result]=-1;
+						break;
+					default:
+						$error=mysql_error($this->connection);
+						return($this->SetError("Query","this select query did not return valid result set value: ".$query.(strlen($error) ? " (".$error.")" : "")));
+				}
+			}
 			else
 				$this->affected_rows=mysql_affected_rows($this->connection);
 		}
@@ -237,7 +257,8 @@ class metabase_mysql_class extends metabase_database_class
 				$value=(strcmp($value,"Y") ? 0 : 1);
 				return(1);
 			case METABASE_TYPE_DECIMAL:
-				$value=sprintf("%.".$this->decimal_places."f",doubleval($value)/$this->decimal_factor);
+				if($this->emulate_decimal)
+					$value=sprintf("%.".$this->decimal_places."f",doubleval($value)/$this->decimal_factor);
 				return(1);
 			case METABASE_TYPE_FLOAT:
 				$value=doubleval($value);
@@ -316,7 +337,7 @@ class metabase_mysql_class extends metabase_database_class
 
 	Function GetIntegerFieldTypeDeclaration($name,&$field)
 	{
-		return("$name ".(IsSet($field["unsigned"]) ? "INT UNSIGNED" : "INT").(IsSet($field["default"]) ? " DEFAULT ".$field["default"] : "").(IsSet($field["notnull"]) ? " NOT NULL" : ""));
+		return("$name ".(IsSet($field["unsigned"]) ? "INT UNSIGNED" : "INT").(IsSet($field["autoincrement"]) ? " AUTO_INCREMENT" : (IsSet($field["default"]) ? " DEFAULT ".$field["default"] : "")).(IsSet($field["notnull"]) ? " NOT NULL" : ""));
 	}
 
 	Function GetDateFieldTypeDeclaration($name,&$field)
@@ -348,7 +369,7 @@ class metabase_mysql_class extends metabase_database_class
 
 	Function GetDecimalFieldTypeDeclaration($name,&$field)
 	{
-		return("$name BIGINT".(IsSet($field["default"]) ? " DEFAULT ".$this->GetDecimalFieldValue($field["default"]) : "").(IsSet($field["notnull"]) ? " NOT NULL" : ""));
+		return($name.($this->emulate_decimal ? " BIGINT" : " DECIMAL(30,".$this->decimal_places.")").(IsSet($field["default"]) ? " DEFAULT ".$this->GetDecimalFieldValue($field["default"]) : "").(IsSet($field["notnull"]) ? " NOT NULL" : ""));
 	}
 
 	Function GetCLOBFieldValue($prepared_query,$parameter,$clob,&$value)
@@ -379,7 +400,7 @@ class metabase_mysql_class extends metabase_database_class
 			if(!MetabaseReadLOB($blob,$data,$this->lob_buffer_length))
 			{
 				$value="";
-				return($this->SetError("Get BLOB field value",MetabaseLOBError($clob)));
+				return($this->SetError("Get BLOB field value",MetabaseLOBError($blob)));
 			}
 			$value.=AddSlashes($data);
 		}
@@ -399,7 +420,7 @@ class metabase_mysql_class extends metabase_database_class
 
 	Function GetDecimalFieldValue($value)
 	{
-		return(!strcmp($value,"NULL") ? "NULL" : strval(round(doubleval($value)*$this->decimal_factor)));
+		return(!strcmp($value,"NULL") ? "NULL" : strval($this->emulate_decimal ? round(doubleval($value)*$this->decimal_factor) : $value));
 	}
 
 	Function GetColumnNames($result,&$column_names)
@@ -433,9 +454,21 @@ class metabase_mysql_class extends metabase_database_class
 		$sequence_name=$this->sequence_prefix.$name;
 		if(!$this->Query("INSERT INTO $sequence_name (sequence) VALUES (NULL)"))
 			return(0);
-		$value=intval(mysql_insert_id());
+		$value=intval(mysql_insert_id($this->connection));
 		if(!$this->Query("DELETE FROM $sequence_name WHERE sequence<$value"))
 			$this->warning="could delete previous sequence table values";
+		return(1);
+	}
+
+	Function GetNextKey($table,&$key)
+	{
+		$key="NULL";
+		return(1);
+	}
+
+	Function GetInsertedKey($table,&$value)
+	{
+		$value=intval(mysql_insert_id($this->connection));
 		return(1);
 	}
 
@@ -495,6 +528,9 @@ class metabase_mysql_class extends metabase_database_class
 		$this->supported["SelectRowRanges"]=
 		$this->supported["LOBs"]=
 		$this->supported["Replace"]=
+		$this->supported["AutoIncrement"]=
+		$this->supported["PrimaryKey"]=
+		$this->supported["OmitInsertKey"]=
 			1;
 		if(IsSet($this->options["UseTransactions"])
 		&& $this->options["UseTransactions"])
@@ -526,7 +562,12 @@ class metabase_mysql_class extends metabase_database_class
 					return($this->options["DefaultTableType"]." is not a supported default table type");
 			}
 		}
-		$this->decimal_factor=pow(10.0,$this->decimal_places);
+		if(IsSet($this->options["EmulateDecimal"])
+		&& $this->options["EmulateDecimal"])
+		{
+			$this->emulate_decimal=1;
+			$this->decimal_factor=pow(10.0,$this->decimal_places);
+		}
 		return("");
 	}
 };

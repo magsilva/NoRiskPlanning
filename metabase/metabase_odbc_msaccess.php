@@ -7,25 +7,16 @@ if(!defined("METABASE_ODBC_MSACCESS_INCLUDED"))
 /*
  * metabase_odbc_msaccess.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/metabase_odbc_msaccess.php,v 1.1.1.1 2003/02/27 20:55:34 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/metabase_odbc_msaccess.php,v 1.3 2002/12/30 14:20:47 mlemos Exp $
  *
  */
 
 class metabase_odbc_msaccess_class extends metabase_odbc_class
 {
-	//removed $row argument from odbc_fetch_into calls because of an Access bug
-	Function FetchInto($result,$row,&$array)
-	{
-		if($this->php_version>=4002000)
-			return(odbc_fetch_into($result,$array)); 
-		elseif($this->php_version>=4000005)
-			return(odbc_fetch_into($result,$array));
-		else
-		{
-			eval("\$success=odbc_fetch_into(\$result,&\$array);");
-			return($success);
-		}
-	}
+	var $get_type_info=0;
+	var $manager_sub_included_constant="METABASE_MANAGER_ODBC_MSACCESS_INCLUDED";
+	var $manager_sub_include="manager_odbc_msaccess.php";
+	var $manager_class_name="metabase_manager_odbc_msaccess_class";
 
 	// If UseDecimalScale=1 - use INT for DECIMAL, otherwise use CURRENCY
 	// TODO: issue a warning if decimal_places>4 and UseDecimalScale=0
@@ -160,21 +151,46 @@ class metabase_odbc_msaccess_class extends metabase_odbc_class
 		}
 	}
 
-	// If there is ONLY the AUTOINCREMENT field, we have to insert a numeric value into it every time
-	// That is fine here, but later we need the 'foo' field to insert NULL values into it for auto-incrementation
-	Function CreateSequence($name,$start)
+	Function GetCLOBFieldValue($prepared_query,$parameter,$clob,&$value)
 	{
-		if($this->Query("CREATE TABLE _sequence_$name (sequence AUTOINCREMENT NOT NULL PRIMARY KEY, foo BIT)"))
-			return($this->Query("INSERT INTO _sequence_$name(sequence) VALUES(".(intval($start)-1).")"));
-		return(0);
+		for($value="'";!MetabaseEndOfLOB($clob);)
+		{
+			if(MetabaseReadLOB($clob,$data,$this->lob_buffer_length)<0)
+			{
+				$value="";
+				return($this->SetError("Get CLOB field value",MetabaseLOBError($clob)));
+			}
+			$this->EscapeText($data);
+			$value.=$data;
+		}
+		$value.="'";
+		return(1);			
 	}
 
-	Function DropSequence($name)
+	Function FreeCLOBValue($prepared_query,$clob,&$value,$success)
 	{
-		return($this->Query("DROP TABLE _sequence_$name"));
+		Unset($value);
 	}
 
-	// This will only work in Access 2000
+	Function GetBLOBFieldValue($prepared_query,$parameter,$blob,&$value)
+	{
+		for($value="0x";!MetabaseEndOfLOB($blob);)
+		{
+			if(!MetabaseReadLOB($blob,$data,$this->lob_buffer_length))
+			{
+				$value="";
+				return($this->SetError("Get BLOB field value",MetabaseLOBError($blob)));
+			}
+			$value.=Bin2Hex($data);
+		}
+		return(1);			
+	}
+
+	Function FreeBLOBValue($prepared_query,$blob,&$value,$success)
+	{
+		Unset($value);
+	}
+
 	Function GetSequenceNextValue($name,&$value)
 	{
 		if(!($this->Query("INSERT INTO _sequence_$name(foo) VALUES(NULL)"))
@@ -187,35 +203,32 @@ class metabase_odbc_msaccess_class extends metabase_odbc_class
 		return(1);
 	}
 
-	Function GetSequenceCurrentValue($name,&$value)
-	{
-		if(!($result=$this->Query("SELECT sequence FROM _sequence_$name")))
-			return(0);
-		if($this->NumberOfRows($result)==0)
-		{
-			$this->FreeResult($result);
-			return($this->SetError("Get sequence current value","could not find value in sequence table"));
-		}
-		$value=intval($this->FetchResult($result,0,0));
-		$this->FreeResult($result);
-		return(1);
-	}
-
-	// Unsetting LOBs because only CLOBs seem to work, but you can use those as text>256 anyway
-	// Unsetting Replace because that way Transactions pass the tests (remember to turn-on the
-	// transactions in driver_test_config
 	Function SetupODBC()
 	{
-		$this->supported["Indexes"]=
+		if(!IsSet($this->options["UseIndexes"])
+		|| $this->options["UseIndexes"])
+			$this->supported["Indexes"]=1;
+		if(!IsSet($this->options["UseTransactions"])
+		|| $this->options["UseTransactions"])
+			$this->supported["Transactions"]=$this->supported["Replace"]=1;
+		$this->support_defaults=(IsSet($this->options["UseDefaultValues"]) && $this->options["UseDefaultValues"]);
 		$this->supported["Sequences"]=
 		$this->supported["GetSequenceCurrentValue"]=1;
-
-		unset($this->supported["LOBs"]);
-		unset($this->supported["Replace"]);
-		return(1);
+		$this->blob_declaration=(IsSet($this->options["BLOBType"]) ? $this->options["BLOBType"] : "IMAGE");
+		if(strlen($this->blob_declaration)>0)
+		{
+			$this->clob_declaration=(IsSet($this->options["CLOBType"]) ? $this->options["CLOBType"] : "MEMO");
+			if(strlen($this->clob_declaration)==0)
+				$this->clob_declaration=$this->blob_declaration;
+			$this->supported["LOBs"]=1;
+			return(1);
+		}
+		$get_type_info=$this->get_type_info;
+		$this->get_type_info=1;
+		$success=$this->SetupODBCLOBs();
+		$this->get_type_info=$get_type_info;
+		return($success);
 	}
-
 };
-
 }
 ?>

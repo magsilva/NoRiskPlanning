@@ -1,8 +1,8 @@
-<?
+<?php
 /*
  * metabase_ibase.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/metabase_ibase.php,v 1.1.1.1 2003/02/27 20:55:33 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/metabase_ibase.php,v 1.18 2004/07/27 06:26:03 mlemos Exp $
  *
  */
 
@@ -30,6 +30,9 @@ class metabase_ibase_class extends metabase_database_class
 	var $query_parameter_values=array();
 	var $transaction_id=0;
 	var $escape_quotes="'";
+	var $manager_class_name="metabase_manager_ibase_class";
+	var $manager_include="manager_ibase.php";
+	var $manager_included_constant="METABASE_MANAGER_IBASE_INCLUDED";
 
 	Function GetDatabaseFile($database_name)
 	{
@@ -92,32 +95,6 @@ class metabase_ibase_class extends metabase_database_class
 			$this->connection=0;
 			$this->affected_rows=-1;
 		}
-	}
-
-	Function DBAQuery($database_file,$query)
-	{
-		if(!function_exists("ibase_connect"))
-			return($this->SetError("DBA query","Interbase support is not available in this PHP configuration"));
-		if(!IsSet($this->options[$option="DBAUser"])
-		|| !IsSet($this->options[$option="DBAPassword"]))
-			return($this->SetError("DBA query","it was not specified the Interbase $option option"));
-		$database=$this->host.(strcmp($database_file,"") ? ":".$database_file : "");
-		if(($connection=@ibase_connect($database,$this->options["DBAUser"],$this->options["DBAPassword"]))<=0)
-			return($this->SetError("DBA query","Could not connect to Interbase server ($database): ".ibase_errmsg()));
-		if(!($success=@ibase_query($connection,$query)))
-			$this->SetError("DBA query","Could not execute query ($query): ".ibase_errmsg());
-		ibase_close($connection);
-		return($success);
-	}
-
-	Function CreateDatabase($name)
-	{
-		return($this->DBAQuery("","CREATE DATABASE '".$this->GetDatabaseFile($name)."'"));
-	}
-
-	Function DropDatabase($name)
-	{
-		return($this->DBAQuery($this->GetDatabaseFile($name),"DROP DATABASE"));
 	}
 
 	Function GetColumnNames($result,&$column_names)
@@ -197,7 +174,7 @@ class metabase_ibase_class extends metabase_database_class
 			$result=@ibase_query($connection,$query);
 		if($result)
 		{
-			if(($select=(substr(strtolower(ltrim($query)),0,strlen("select"))=="select")))
+			if(($select=!strcmp(strtolower(strtok(ltrim($query)," \t\n\r")),"select")))
 			{
 				$result_value=intval($result);
 				$this->current_row[$result_value]=-1;
@@ -650,125 +627,6 @@ class metabase_ibase_class extends metabase_database_class
 		return(!strcmp($value,"NULL") ? "NULL" : "$value");
 	}
 
-	Function CheckSupportedChanges(&$changes)
-	{
-		for($change=0,Reset($changes);$change<count($changes);Next($changes),$change++)
-		{
-			switch(Key($changes))
-			{
-				case "ChangedNotNull":
-				case "notnull":
-					return($this->SetError("Check supported changes","it is not supported changes to field not null constraint"));
-				case "ChangedDefault":
-				case "default":
-					return($this->SetError("Check supported changes","it is not supported changes to field default value"));
-				case "length":
-					return($this->SetError("Check supported changes","it is not supported changes to field length"));
-				case "unsigned":
-				case "type":
-				case "Declaration":
-				case "Definition":
-					break;
-				default:
-					return($this->SetError("Check supported changes","it is not supported field changes of type \"".Key($changes)."\""));
-			}
-		}
-		return(1);
-	}
-
-	Function AlterTable($name,&$changes,$check)
-	{
-		if($check)
-		{
-			for($change=0,Reset($changes);$change<count($changes);Next($changes),$change++)
-			{
-				switch(Key($changes))
-				{
-					case "AddedFields":
-					case "RemovedFields":
-					case "RenamedFields":
-						break;
-					case "ChangedFields":
-						$fields=$changes["ChangedFields"];
-						for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-						{
-							if(!$this->CheckSupportedChanges($fields[Key($fields)]))
-								return(0);
-						}
-						break;
-					default:
-						return($this->SetError("Alter table","change type \"".Key($changes)."\" not yet supported"));
-				}
-			}
-			return(1);
-		}
-		else
-		{
-			$query="";
-			if(IsSet($changes["AddedFields"]))
-			{
-				$fields=$changes["AddedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-				{
-					if(strcmp($query,""))
-						$query.=", ";
-					$query.="ADD ".$fields[Key($fields)]["Declaration"];
-				}
-			}
-			if(IsSet($changes["RemovedFields"]))
-			{
-				$fields=$changes["RemovedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-				{
-					if(strcmp($query,""))
-						$query.=", ";
-					$query.="DROP ".Key($fields);
-				}
-			}
-			if(IsSet($changes["RenamedFields"]))
-			{
-				$fields=$changes["RenamedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-				{
-					if(strcmp($query,""))
-						$query.=", ";
-					$query.="ALTER ".Key($fields)." TO ".$fields[Key($fields)]["name"];
-				}
-			}
-			if(IsSet($changes["ChangedFields"]))
-			{
-				$fields=$changes["ChangedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-				{
-					$field_name=Key($fields);
-					if(!$this->CheckSupportedChanges($fields[$field_name]))
-						return(0);
-					if(strcmp($query,""))
-						$query.=", ";
-					$query.="ALTER $field_name TYPE ".$this->GetFieldTypeDeclaration($fields[$field_name]["Definition"]);
-				}
-			}
-			return($this->Query("ALTER TABLE $name $query"));
-		}
-	}
-
-	Function CreateSequence($name,$start)
-	{
-		if(!$this->Query("CREATE GENERATOR $name"))
-			return(0);
-		if($this->Query("SET GENERATOR $name TO ".($start-1)))
-			return(1);
-		$error=$this->Error();
-		if(!$this->DropSequence($name))
-			return($this->SetError("","Could not setup sequence start value ($error) and then it was not possible to drop it (".$this->Error().")"));
-		return(0);
-	}
-
-	Function DropSequence($name)
-	{
-		return($this->Query("DELETE FROM RDB\$GENERATORS WHERE RDB\$GENERATOR_NAME='".strtoupper($name)."'"));
-	}
-
 	Function GetSequenceNextValue($name,&$value)
 	{
 		if(($result=$this->Query("SELECT GEN_ID($name,1) as the_value FROM RDB\$DATABASE "))==0)
@@ -776,41 +634,6 @@ class metabase_ibase_class extends metabase_database_class
 		$value=intval($this->FetchResult($result,0,0));
 		$this->FreeResult($result);
 		return(1);
-	}
-
-	Function GetSequenceCurrentValue($name,&$value)
-	{
-		if(($result=$this->Query("SELECT GEN_ID($name,0) as the_value FROM RDB\$DATABASE "))==0)
-			return($this->SetError("Get sequence current value", ibase_errmsg()));
-		$value=intval($this->FetchResult($result,0,0));
-		$this->FreeResult($result);
-		return(1);
-	}
-
-	Function CreateIndex($table,$name,$definition)
-	{
-		for($query_sort="",$query_fields="",$field=0,Reset($definition["FIELDS"]);$field<count($definition["FIELDS"]);$field++,Next($definition["FIELDS"]))
-		{
-			if($field>0)
-				$query_fields.=",";
-			$field_name=Key($definition["FIELDS"]);
-			$query_fields.=$field_name;
-			if(!strcmp($query_sort,"")
-			&& $this->Support("IndexSorting")
-			&& IsSet($definition["FIELDS"][$field_name]["sorting"]))
-			{
-				switch($definition["FIELDS"][$field_name]["sorting"])
-				{
-					case "ascending":
-						$query_sort=" ASC";
-						break;
-					case "descending":
-						$query_sort=" DESC";
-						break;
-				}
-			}
-		}
-		return($this->Query("CREATE".(IsSet($definition["unique"]) ? " UNIQUE" : "")."$query_sort INDEX $name ON $table ($query_fields)"));
 	}
 
 	Function AutoCommitTransactions($auto_commit)

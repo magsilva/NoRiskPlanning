@@ -1,4 +1,4 @@
-<?
+<?php
 if(!defined("METABASE_MSQL_INCLUDED"))
 {
 	define("METABASE_MSQL_INCLUDED",1);
@@ -6,7 +6,7 @@ if(!defined("METABASE_MSQL_INCLUDED"))
 /*
  * metabase_msql.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/metabase_msql.php,v 1.1.1.1 2003/02/27 20:55:34 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/metabase_msql.php,v 1.40 2004/07/27 06:26:03 mlemos Exp $
  *
  */
  
@@ -20,6 +20,9 @@ class metabase_msql_class extends metabase_database_class
 	var $columns=array();
 	var $limits=array();
 	var $escape_quotes="\\";
+	var $manager_class_name="metabase_manager_msql_class";
+	var $manager_include="manager_msql.php";
+	var $manager_included_constant="METABASE_MANAGER_MSQL_INCLUDED";
 
 	Function Connect()
 	{
@@ -81,9 +84,9 @@ class metabase_msql_class extends metabase_database_class
 		$this->first_selected_row=$this->selected_row_limit=0;
 		if(!$this->SelectDatabase())
 			return(0);
-		if(($result=msql_query($query,$this->connection)))
+		if(($result=@msql_query($query,$this->connection)))
 		{
-			if(substr(strtolower(ltrim($query)),0,strlen("select"))=="select")
+			if(!strcmp(strtolower(strtok(ltrim($query)," \t\n\r")),"select"))
 			{
 				if($limit>0)
 					$this->limits[$result]=array($first,$limit);
@@ -168,24 +171,6 @@ class metabase_msql_class extends metabase_database_class
 		UnSet($this->limits[$result]);
 		UnSet($this->result_types[$result]);
 		return(msql_free_result($result));
-	}
-
-	Function CreateDatabase($name)
-	{
-		if(!$this->Connect())
-			return(0);
-		if(!msql_create_db($name,$this->connection))
-			return($this->SetError("Create database",msql_error()));
-		return(1);
-	}
-
-	Function DropDatabase($name)
-	{
-		if(!$this->Connect())
-			return(0);
-		if(!msql_drop_db($name,$this->connection))
-			return($this->SetError("Drop database",msql_error()));
-		return(1);
 	}
 
 	Function GetIntegerFieldTypeDeclaration($name,&$field)
@@ -276,11 +261,6 @@ class metabase_msql_class extends metabase_database_class
 		return("$name INT".(IsSet($field["notnull"]) ? " NOT NULL" : ""));
 	}
 
-	Function GetFloatFieldValue($value)
-	{
-		return(!strcmp($value,"NULL") ? "NULL" : "$value");
-	}
-
 	Function GetDecimalFieldValue($value)
 	{
 		return(!strcmp($value,"NULL") ? "NULL" : strval(round($value*$this->decimal_factor)));
@@ -339,24 +319,6 @@ class metabase_msql_class extends metabase_database_class
 			default:
 				return($this->BaseConvertResult($value,$type));
 		}
-	}
-
-	Function CreateSequence($name,$start)
-	{
-		if(!$this->Query("CREATE TABLE sequence_$name (dummy INT)"))
-			return(0);
-		if($this->Query("CREATE SEQUENCE ON sequence_$name STEP 1 VALUE $start"))
-			return(1);
-		$error=$this->Error();
-		if(!$this->Query("DROP TABLE sequence_$name"))
-			$this->warning="could not drop inconsistent sequence table";
-		return($this->SetError("Create sequence",$error));
-		return(0);
-	}
-
-	Function DropSequence($name)
-	{
-		return($this->Query("DROP TABLE sequence_$name"));
 	}
 
 	Function GetSequenceNextValue($name,&$value)

@@ -2,7 +2,7 @@
 /*
  * metabase_parser.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/metabase_parser.php,v 1.1.1.1 2003/02/27 20:55:35 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/metabase_parser.php,v 1.54 2005/09/07 05:40:28 mlemos Exp $
  *
  */
 
@@ -69,6 +69,7 @@ class metabase_parser_class
 		"default"=>1,
 		"notnull"=>1,
 		"unsigned"=>1,
+	  "autoincrement"=>1,
 		"length"=>1,
 		"description"=>0,
 		"comment"=>0
@@ -77,6 +78,11 @@ class metabase_parser_class
 		"name"=>1,
 		"was"=>1,
 		"unique"=>1,
+		"field"=>0,
+		"description"=>0,
+		"comment"=>0
+	);
+	var $primary_key_properties=array(
 		"field"=>0,
 		"description"=>0,
 		"comment"=>0
@@ -245,21 +251,21 @@ class metabase_parser_class
 				}
 				break;
 			case "date":
-				if(!ereg("^([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})$",$value))
+				if(!ereg("^([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})\$",$value))
 				{
 					$this->SetParserError($path,"field value is not a valid date value");
 					return(0);
 				}
 				break;
 			case "timestamp":
-				if(!ereg("^([0-9]{4})-([0-9]{1,2})-([0-9]{1,2}) ([0-9]{2}):([0-9]{2}):([0-9]{2})$",$value))
+				if(!ereg("^([0-9]{4})-([0-9]{1,2})-([0-9]{1,2}) ([0-9]{2}):([0-9]{2}):([0-9]{2})\$",$value))
 				{
 					$this->SetParserError($path,"field value is not a valid timestamp value");
 					return(0);
 				}
 				break;
 			case "time":
-				if(!ereg("^([0-9]{2}):([0-9]{2}):([0-9]{2})$",$value))
+				if(!ereg("^([0-9]{2}):([0-9]{2}):([0-9]{2})\$",$value))
 				{
 					$this->SetParserError($path,"field value is not a valid time value");
 					return(0);
@@ -318,6 +324,137 @@ class metabase_parser_class
 		return(1);
 	}
 
+	Function CompareIndexes($index_1, $index_2)
+	{
+		if(count($index_1["FIELDS"])!=count($index_2["FIELDS"]))
+			return(0);
+		for($i=0, Reset($index_1["FIELDS"]);$i<count($index_1["FIELDS"]);Next($index_1["FIELDS"]),$i++)
+		{
+			if(!IsSet($index_2[Key($index_1["FIELDS"])]))
+				return(0);
+		}
+		return(1);
+	}
+
+	Function CompareTableIndexes(&$table_definition, &$index, &$index_name)
+	{
+		if(!IsSet($table_definition["INDEXES"]))
+			return(0);
+		for($i=0, Reset($table_definition["INDEXES"]);$i<count($table_definition["INDEXES"]);Next($table_definition["INDEXES"]),$i++)
+		{
+			$index_name=Key($table_definition["INDEXES"]);
+			if($this->CompareIndexes($table_definition["INDEXES"][$index_name], $index))
+				return(1);
+		}
+		return(0);
+	}
+
+	Function ParseKey($declaration_element_path, &$table_definition, &$declaration_definition, $primary_key)
+	{
+		if($primary_key)
+		{
+			$tag="primarykey";
+			$properties=$this->primary_key_properties;
+		}
+		else
+		{
+			$tag="index";
+			$properties=$this->index_properties;
+		}
+		$declaration_definition=array("FIELDS"=>array());
+		if(!$this->ParseProperties($declaration_element_path,$properties,$tag,$index_tags,$index_values))
+			return($this->error);
+		if(!$primary_key)
+		{
+			if(!IsSet($index_tags["name"]))
+				return($this->SetParserError($declaration_element_path,"it was not defined the $tag name property"));
+			if(!strcmp($index_values["name"],""))
+				return($this->SetParserError($index_tags["name"],"It was not defined a valid $tag name property"));
+			if($this->fail_on_invalid_names
+			&& IsSet($this->invalid_names[$index_values["name"]]))
+				return($this->SetParserError($index_tags["name"],"It was defined a potentially invalid $tag name property"));
+			if(IsSet($table_definition["INDEXES"][$index_values["name"]]))
+				return($this->SetParserError($index_tags["name"],"$tag is already defined"));
+			if(IsSet($index_tags["was"]))
+			{
+				if(!strcmp($index_values["was"],""))
+					return($this->SetParserError($index_tags["was"],"It was not defined a valid $tag was property"));
+				$declaration_definition["was"]=$index_values["was"];
+			}
+			else
+				$declaration_definition["was"]=$index_values["name"];
+			if(IsSet($index_tags["unique"]))
+			{
+				switch($index_values["unique"])
+				{
+					case "1":
+						$declaration_definition["unique"]=1;
+					case "0":
+						break;
+					default:
+						return($this->SetParserError($index_tags["unique"],"It was not defined a valid $tag unique boolean value"));
+				}
+			}
+		}
+		if(IsSet($index_tags["field"]))
+		{
+			$fields=count($index_tags["field"]);
+			for($field=0;$field<$fields;$field++)
+			{
+				$index_declaration_definition=array();
+				if(!$this->ParseProperties($index_tags["field"][$field],$this->index_field_properties,"$tag field",$index_field_tags,$index_field_values))
+					return($this->error);
+				if(!IsSet($index_field_tags["name"]))
+					return($this->SetParserError($index_tags["field"][$field],"It was not defined the $tag field name property"));
+				if(!strcmp($index_field_values["name"],""))
+					return($this->SetParserError($index_field_tags["name"],"It was not defined a valid $tag field name property"));
+				if(IsSet($declaration_definition["FIELDS"][$index_field_values["name"]]))
+					return($this->SetParserError($index_tags["field"][$field],"Field was already declared for the $tag"));
+				if(!IsSet($table_definition["FIELDS"][$index_field_values["name"]]))
+					return($this->SetParserError($index_field_tags["name"],"It was declared $tag field not defined for this table"));
+				switch($table_definition["FIELDS"][$index_field_values["name"]]["type"])
+				{
+					case "clob":
+					case "blob":
+						return($this->SetParserError($index_field_tags["name"],"$tag field of a large object types are not supported"));
+				}
+				if(!IsSet($table_definition["FIELDS"][$index_field_values["name"]]["notnull"]))
+					return($this->SetParserError($index_tags["field"][$field],"It was declared a $tag field that is not defined as notnull"));
+				if(IsSet($index_field_tags["sorting"]))
+				{
+					switch($index_field_values["sorting"])
+					{
+						case "ascending":
+						case "descending":
+							$index_declaration_definition["sorting"]=$index_field_values["sorting"];
+							break;
+						default:
+							return($this->SetParserError($index_field_tags["sorting"],"it was not defined a valid $tag field sorting type"));
+					}
+				}
+				$declaration_definition["FIELDS"][$index_field_values["name"]]=$index_declaration_definition;
+			}
+		}
+		if(count($declaration_definition["FIELDS"])==0)
+			return($this->SetParserError($declaration_element_path,"$tag declaration has not specified any fields"));
+		if($primary_key)
+		{
+			if($this->CompareTableIndexes($table_definition, $declaration_definition, $index_name))
+				return($this->SetParserError($declaration_element_path,"it was defined the primary key with the same field list as the index ".$index_name));
+			$table_definition["PRIMARYKEY"]=$declaration_definition;
+		}
+		else
+		{
+			if($this->CompareTableIndexes($table_definition, $declaration_definition, $index_name))
+				return($this->SetParserError($declaration_element_path,"it was defined the index ".$index_values["name"]." with the same field list as the index ".$index_name));
+			if(IsSet($table_definition["PRIMARYKEY"])
+			&& $this->CompareIndexes($table_definition["PRIMARYKEY"], $declaration_definition))
+				return($this->SetParserError($declaration_element_path,"it was defined the index ".$index_values["name"]." with the same field list as the primary key"));
+			$table_definition["INDEXES"][$index_values["name"]]=$declaration_definition;
+		}
+		return("");
+	}
+
 	/* PUBLIC METHODS */
 
 	Function Parse($data,$end_of_data)
@@ -370,7 +507,6 @@ class metabase_parser_class
 					return($this->SetParserError("0","it were not specified any database tables"));
 				for($table=0;$table<$tables;$table++)
 				{
-					$table_definition=array("FIELDS"=>array());
 					if(!$this->ParseProperties($database_tags["table"][$table],$this->table_properties,"table",$table_tags,$table_values))
 						return($this->error);
 					if(!IsSet($table_tags["name"]))
@@ -382,6 +518,7 @@ class metabase_parser_class
 						return($this->SetParserError($table_tags["name"],"It was defined a potentially invalid table name property"));
 					if(IsSet($this->database["TABLES"][$table_values["name"]]))
 						return($this->SetParserError($table_tags["name"],"TABLE is already defined"));
+					$table_definition=array("name"=>$table_values["name"], "FIELDS"=>array());
 					if(IsSet($table_tags["was"]))
 					{
 						if(!strcmp($table_definition["was"]=$table_values["was"],""))
@@ -395,6 +532,7 @@ class metabase_parser_class
 						return($this->SetParserError($table_tags["declaration"][1],"it was defined the table declaration section more than once"));
 					$declaration_tags=$declaration_definition=array();
 					$declaration_elements=$this->xml_parser->structure[$table_tags["declaration"][0]]["Elements"];
+					$auto_increment_field="";
 					for($declaration_element=0;$declaration_element<$declaration_elements;$declaration_element++)
 					{
 						$declaration_element_path=$table_tags["declaration"][0].",$declaration_element";
@@ -404,12 +542,11 @@ class metabase_parser_class
 							switch($data["Tag"])
 							{
 								case "field":
-									$declaration_definition=array();
+									$declaration_definition=array("TABLE"=>$table_definition["name"]);
 									if(!$this->ParseProperties($declaration_element_path,$this->field_properties,"field",$field_tags,$field_values))
 										return($this->error);
-									if(!IsSet($field_tags[$property="name"])
-									|| !IsSet($field_tags[$property="type"]))
-										return($this->SetParserError($declaration_element_path,"it was not defined the field $property property"));
+									if(!IsSet($field_tags["name"]))
+										return($this->SetParserError($declaration_element_path,"it was not defined the field name property"));
 									if(!strcmp($field_values["name"],""))
 										return($this->SetParserError($field_tags["name"],"It was not defined a valid field name property"));
 									if($this->fail_on_invalid_names
@@ -417,6 +554,46 @@ class metabase_parser_class
 										return($this->SetParserError($field_tags["name"],"It was defined a potentially invalid field name property"));
 									if(IsSet($table_definition["FIELDS"][$field_values["name"]]))
 										return($this->SetParserError($field_tags["name"],"field is already defined"));
+									if(IsSet($field_tags["autoincrement"])
+									&& !strcmp($field_values["autoincrement"],"1"))
+									{
+										if(strlen($auto_increment_field))
+											return($this->SetParserError($field_tags["autoincrement"],"a table cannot have more than one autoincrement field"));
+										if(IsSet($field_tags[$property="type"]))
+										{
+											if(strcmp($field_values[$property],$value="integer"))
+												return($this->SetParserError($field_tags[$property],"autoincrement field $property property must be $value"));
+										}
+										else
+										{
+											$field_values["type"]="integer";
+											$field_tags["type"]=$field_tags["autoincrement"];
+										}
+										if(IsSet($field_tags[$property="notnull"]))
+										{
+											if(strcmp($field_values[$property],$value="1"))
+												return($this->SetParserError($field_tags[$property],"autoincrement field $property property must be $value"));
+										}
+										else
+										{
+											$field_values["notnull"]="1";
+											$field_tags["notnull"]=$field_tags["autoincrement"];
+										}
+										if(!IsSet($field_tags[$property="default"]))
+										{
+											$field_values["default"]="0";
+											$field_tags["default"]=$field_tags["autoincrement"];
+										}
+										if(!IsSet($field_tags[$property="unsigned"]))
+										{
+											$field_values["unsigned"]="1";
+											$field_tags["unsigned"]=$field_tags["autoincrement"];
+										}
+										$auto_increment_field=$field_values["name"];
+										$declaration_definition["autoincrement"]=1;
+									}
+									if(!IsSet($field_tags["type"]))
+										return($this->SetParserError($declaration_element_path,"it was not defined the field type property"));
 									if(IsSet($field_tags["was"]))
 									{
 										if(!strcmp($field_values["was"],""))
@@ -505,80 +682,9 @@ class metabase_parser_class
 									$table_definition["FIELDS"][$field_values["name"]]=$declaration_definition;
 									break;
 								case "index":
-									$declaration_definition=array("FIELDS"=>array());
-									if(!$this->ParseProperties($declaration_element_path,$this->index_properties,"index",$index_tags,$index_values))
-										return($this->error);
-									if(!IsSet($index_tags["name"]))
-										return($this->SetParserError($declaration_element_path,"it was not defined the index name property"));
-									if(!strcmp($index_values["name"],""))
-										return($this->SetParserError($index_tags["name"],"It was not defined a valid index name property"));
-									if($this->fail_on_invalid_names
-									&& IsSet($this->invalid_names[$index_values["name"]]))
-										return($this->SetParserError($index_tags["name"],"It was defined a potentially invalid index name property"));
-									if(IsSet($table_definition["INDEXES"][$index_values["name"]]))
-										return($this->SetParserError($index_tags["name"],"index is already defined"));
-									if(IsSet($index_tags["was"]))
-									{
-										if(!strcmp($index_values["was"],""))
-											return($this->SetParserError($index_tags["was"],"It was not defined a valid index was property"));
-										$declaration_definition["was"]=$index_values["was"];
-									}
-									else
-										$declaration_definition["was"]=$index_values["name"];
-									if(IsSet($index_tags["unique"]))
-									{
-										switch($index_values["unique"])
-										{
-											case "1":
-												$declaration_definition["unique"]=1;
-											case "0":
-												break;
-											default:
-												return($this->SetParserError($index_tags["unique"],"It was not defined a valid unique boolean value"));
-										}
-									}
-									if(IsSet($index_tags["field"]))
-									{
-										$fields=count($index_tags["field"]);
-										for($field=0;$field<$fields;$field++)
-										{
-											$index_declaration_definition=array();
-											if(!$this->ParseProperties($index_tags["field"][$field],$this->index_field_properties,"index field",$index_field_tags,$index_field_values))
-												return($this->error);
-											if(!IsSet($index_field_tags["name"]))
-												return($this->SetParserError($index_tags["field"][$field],"It was not defined the index field name property"));
-											if(!strcmp($index_field_values["name"],""))
-												return($this->SetParserError($index_field_tags["name"],"It was not defined a valid index field name property"));
-											if(IsSet($declaration_definition["FIELDS"][$index_field_values["name"]]))
-												return($this->SetParserError($index_tags["field"][$field],"Field was already declared for this index"));
-											if(!IsSet($table_definition["FIELDS"][$index_field_values["name"]]))
-												return($this->SetParserError($index_field_tags["name"],"It was declared index field not defined for this table"));
-											switch($table_definition["FIELDS"][$index_field_values["name"]]["type"])
-											{
-												case "clob":
-												case "blob":
-													return($this->SetParserError($index_field_tags["name"],"Index field of a large object types are not supported"));
-											}
-											if(!IsSet($table_definition["FIELDS"][$index_field_values["name"]]["notnull"]))
-												return($this->SetParserError($index_tags["field"][$field],"It was declared a index field without defined as notnull"));
-											if(IsSet($index_field_tags["sorting"]))
-											{
-												switch($index_field_values["sorting"])
-												{
-													case "ascending":
-													case "descending":
-														$index_declaration_definition["sorting"]=$index_field_values["sorting"];
-														break;
-													default:
-														return($this->SetParserError($index_field_tags["sorting"],"it was not defined a valid index field sorting type"));
-												}
-											}
-											$declaration_definition["FIELDS"][$index_field_values["name"]]=$index_declaration_definition;
-										}
-									}
-									if(count($declaration_definition["FIELDS"])==0)
-										return($this->SetParserError($declaration_element_path,"index declaration has not specified any fields"));
-									$table_definition["INDEXES"][$index_values["name"]]=$declaration_definition;
+								case "primarykey":
+									if(strlen($error=$this->ParseKey($declaration_element_path, $table_definition, $declaration_definition, $data["Tag"]=="primarykey")))
+										return($error);
 									break;
 								default:
 									return($this->SetParserError($declaration_element_path,"it was not specified a valid table declaration property (".$data["Tag"].")"));
@@ -592,6 +698,28 @@ class metabase_parser_class
 					}
 					if(count($table_definition["FIELDS"])==0)
 						return($this->SetParserError($database_tags["table"][$table],"it were not specified any table fields"));
+					if(strlen($auto_increment_field))
+					{
+						if(IsSet($table_definition["PRIMARYKEY"]))
+						{
+							$fields=count($table_definition["PRIMARYKEY"]["FIELDS"]);
+							for(Reset($table_definition["PRIMARYKEY"]["FIELDS"]),$field=0;$field<$fields;$field++,Next($table_definition["PRIMARYKEY"]["FIELDS"]))
+							{
+								$name=Key($table_definition["PRIMARYKEY"]["FIELDS"]);
+								if(!strcmp($name,$auto_increment_field))
+									break;
+							}
+							if(strcmp($name,$auto_increment_field))
+								return($this->SetParserError($database_tags["table"][$table],"The autoincrement field is not included in the table primary key"));
+						}
+						else
+						{
+							$primary_key=array("FIELDS"=>array($auto_increment_field=>array()));
+							if($this->CompareTableIndexes($table_definition, $primary_key, $index_name))
+								return($this->SetParserError($declaration_element_path,"it was defined an index named ".$index_name." on the field ".$auto_increment_field." which is the same that defines the table primary key because it is an autoincrement field"));
+							$table_definition["PRIMARYKEY"]=$primary_key;
+						}
+					}
 					if(IsSet($table_tags["initialization"]))
 					{
 						if(count($table_tags["initialization"])>1)

@@ -1,4 +1,4 @@
-<?
+<?php
 if(!defined("METABASE_PGSQL_INCLUDED"))
 {
 	define("METABASE_PGSQL_INCLUDED",1);
@@ -6,10 +6,10 @@ if(!defined("METABASE_PGSQL_INCLUDED"))
 /*
  * metabase_pgsql.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/metabase_pgsql.php,v 1.1.1.1 2003/02/27 20:55:35 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/metabase_pgsql.php,v 1.61 2005/11/21 20:51:57 mlemos Exp $
  *
  */
- 
+
 class metabase_pgsql_class extends metabase_database_class
 {
 	var $connection=0;
@@ -19,15 +19,23 @@ class metabase_pgsql_class extends metabase_database_class
 	var $opened_persistent="";
 	var $transaction_started=0;
 	var $decimal_factor=1.0;
+	var $emulate_decimal=0;
 	var $highest_fetched_row=array();
 	var $columns=array();
 	var $escape_quotes="\\";
+	var $manager_included_constant="METABASE_MANAGER_PGSQL_INCLUDED";
+	var $manager_include="manager_pgsql.php";
+	var $manager_class_name="metabase_manager_pgsql_class";
+	var $auto_increment_sequence_prefix="_auto_increment_";
+
 
 	Function DoConnect($database_name,$persistent)
 	{
 		$function=($persistent ? "pg_pconnect" : "pg_connect");
 		if(!function_exists($function))
 			return($this->SetError("Do Connect","PostgreSQL support is not available in this PHP configuration"));
+		if(strlen($database_name)==0)
+			return($this->SetError("Do Connect","it was not specified a PostgreSQL database to connect"));
 		Putenv("PGUSER=".$this->user);
 		Putenv("PGPASSWORD=".$this->password);
 		Putenv("PGDATESTYLE=ISO");
@@ -97,7 +105,7 @@ class metabase_pgsql_class extends metabase_database_class
 		$this->first_selected_row=$this->selected_row_limit=0;
 		if(!$this->Connect())
 			return(0);
-		if(($select=(substr(strtolower(ltrim($query)),0,strlen("select"))=="select"))
+		if(($select=!strcmp(strtolower(strtok(ltrim($query)," \t\n\r")),"select"))
 		&& $limit>0)
 		{
 			if($this->auto_commit
@@ -253,24 +261,11 @@ class metabase_pgsql_class extends metabase_database_class
 		return(pg_freeresult($result));
 	}
 
-	Function StandaloneQuery($query)
+	Function GetIntegerFieldTypeDeclaration($name,&$field)
 	{
-		if(($connection=$this->DoConnect("template1",0))==0)
-			return(0);
-		if(!($success=@pg_Exec($connection,"$query")))
-			$this->SetError("Standalone query",pg_ErrorMessage($connection));
-		pg_Close($connection);
-		return($success);
-	}
-
-	Function CreateDatabase($name)
-	{
-		return($this->StandaloneQuery("CREATE DATABASE $name"));
-	}
-
-	Function DropDatabase($name)
-	{
-		return($this->StandaloneQuery("DROP DATABASE $name"));
+		if(IsSet($field["unsigned"]))
+			$this->warning="unsigned integer field \"$name\" is being declared as signed integer";
+		return("$name INT".(IsSet($field["autoincrement"]) ? " DEFAULT NEXTVAL('".$this->auto_increment_sequence_prefix.$field["TABLE"]."')" : (IsSet($field["default"]) ? " DEFAULT ".$field["default"] : "")).(IsSet($field["notnull"]) ? " NOT NULL" : ""));
 	}
 
 	Function GetTextFieldTypeDeclaration($name,&$field)
@@ -305,7 +300,7 @@ class metabase_pgsql_class extends metabase_database_class
 
 	Function GetDecimalFieldTypeDeclaration($name,&$field)
 	{
-		return("$name INT8 ".(IsSet($field["default"]) ? " DEFAULT ".$this->GetDecimalFieldValue($field["default"]) : "").(IsSet($field["notnull"]) ? " NOT NULL" : ""));
+		return($name.($this->emulate_decimal ? " INT8" : " DECIMAL(18,".$this->decimal_places.")").(IsSet($field["default"]) ? " DEFAULT ".$this->GetDecimalFieldValue($field["default"]) : "").(IsSet($field["notnull"]) ? " NOT NULL" : ""));
 	}
 
 	Function GetLOBFieldValue($prepared_query,$parameter,$lob,&$value)
@@ -386,7 +381,7 @@ class metabase_pgsql_class extends metabase_database_class
 
 	Function GetDecimalFieldValue($value)
 	{
-		return(!strcmp($value,"NULL") ? "NULL" : strval(round($value*$this->decimal_factor)));
+		return(!strcmp($value,"NULL") ? "NULL" : strval($this->emulate_decimal ? round($value*$this->decimal_factor) : $value));
 	}
 
 	Function GetColumnNames($result,&$column_names)
@@ -422,7 +417,8 @@ class metabase_pgsql_class extends metabase_database_class
 				$value=(strcmp($value,"Y") ? 0 : 1);
 				return(1);
 			case METABASE_TYPE_DECIMAL:
-				$value=sprintf("%.".$this->decimal_places."f",doubleval($value)/$this->decimal_factor);
+				if($this->emulate_decimal)
+					$value=sprintf("%.".$this->decimal_places."f",doubleval($value)/$this->decimal_factor);
 				return(1);
 			case METABASE_TYPE_FLOAT:
 				$value=doubleval($value);
@@ -436,66 +432,6 @@ class metabase_pgsql_class extends metabase_database_class
 			default:
 				return($this->BaseConvertResult($value,$type));
 		}
-	}
-
-	Function AlterTable($name,&$changes,$check)
-	{
-		if($check)
-		{
-			for($change=0,Reset($changes);$change<count($changes);Next($changes),$change++)
-			{
-				switch(Key($changes))
-				{
-					case "AddedFields":
-						break;
-					case "RemovedFields":
-						return($this->SetError("Alter table","database server does not support dropping table columns"));
-					case "name":
-					case "RenamedFields":
-					case "ChangedFields":
-					default:
-						return($this->SetError("Alter table","change type \"".Key($changes)."\" not yet supported"));
-				}
-			}
-			return(1);
-		}
-		else
-		{
-			if(IsSet($changes[$change="name"])
-			|| IsSet($changes[$change="RenamedFields"])
-			|| IsSet($changes[$change="ChangedFields"]))
-				return($this->SetError("Alter table","change type \"$change\" not yet supported"));
-			$query="";
-			if(IsSet($changes["AddedFields"]))
-			{
-				$fields=$changes["AddedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-				{
-					if(!$this->Query("ALTER TABLE $name ADD ".$fields[Key($fields)]["Declaration"]))
-						return(0);
-				}
-			}
-			if(IsSet($changes["RemovedFields"]))
-			{
-				$fields=$changes["RemovedFields"];
-				for($field=0,Reset($fields);$field<count($fields);Next($fields),$field++)
-				{
-					if(!$this->Query("ALTER TABLE $name DROP ".Key($fields)))
-						return(0);
-				}
-			}
-			return(1);
-		}
-	}
-
-	Function CreateSequence($name,$start)
-	{
-		return($this->Query("CREATE SEQUENCE $name INCREMENT 1".($start<1 ? " MINVALUE $start" : "")." START $start"));
-	}
-
-	Function DropSequence($name)
-	{
-		return($this->Query("DROP SEQUENCE $name"));
 	}
 
 	Function GetSequenceNextValue($name,&$value)
@@ -512,18 +448,15 @@ class metabase_pgsql_class extends metabase_database_class
 		return(1);
 	}
 
-	Function GetSequenceCurrentValue($name,&$value)
+	Function GetNextKey($table,&$key)
 	{
-		if(!($result=$this->Query("SELECT last_value FROM $name")))
-			return(0);
-		if($this->NumberOfRows($result)==0)
-		{
-			$this->FreeResult($result);
-			return($this->SetError("Get sequence current value","could not find value in sequence table"));
-		}
-		$value=intval($this->FetchResult($result,0,0));
-		$this->FreeResult($result);
+		$key="DEFAULT";
 		return(1);
+	}
+
+	Function GetInsertedKey($table,&$value)
+	{
+		return($this->QueryField("SELECT CURRVAL('".$this->auto_increment_sequence_prefix.$table."')",$value,"integer"));
 	}
 
 	Function AutoCommitTransactions($auto_commit)
@@ -569,6 +502,9 @@ class metabase_pgsql_class extends metabase_database_class
 		$this->supported["SelectRowRanges"]=
 		$this->supported["LOBs"]=
 		$this->supported["Replace"]=
+		$this->supported["AutoIncrement"]=
+		$this->supported["PrimaryKey"]=
+		$this->supported["OmitInsertKey"]=
 			1;
 		if(function_exists("pg_cmdTuples"))
 		{
@@ -592,7 +528,12 @@ class metabase_pgsql_class extends metabase_database_class
 			if(!$result)
 				return($this->Error());
 		}
-		$this->decimal_factor=pow(10.0,$this->decimal_places);
+		if(IsSet($this->options["EmulateDecimal"])
+		&& $this->options["EmulateDecimal"])
+		{
+			$this->emulate_decimal=1;
+			$this->decimal_factor=pow(10.0,$this->decimal_places);
+		}
 		return("");
 	}
 

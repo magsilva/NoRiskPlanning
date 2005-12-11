@@ -1,8 +1,8 @@
-<?
+<?php
 /*
  * setup_test.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/setup_test.php,v 1.1.1.1 2003/02/27 20:55:35 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/setup_test.php,v 1.7 2002/12/11 22:52:24 mlemos Exp $
  *
  */
 

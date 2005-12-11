@@ -2,7 +2,7 @@
 /*
  * metabase_lob.php
  *
- * @(#) $Header: /cvsroot/phpsecurityadm/metabase/metabase_lob.php,v 1.1.1.1 2003/02/27 20:55:33 koivi Exp $
+ * @(#) $Header: /home/mlemos/cvsroot/metabase/metabase_lob.php,v 1.6 2002/10/15 23:30:34 mlemos Exp $
  *
  */
 
@@ -284,6 +284,8 @@ Function MetabaseCreateLOB(&$arguments,&$lob)
 				break;
 			case "outputfile":
 				$class="metabase_output_file_lob_class";
+				break;
+			case "data":
 				break;
 			default:
 				if(IsSet($arguments["Error"]))
