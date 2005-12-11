@@ -1,4 +1,4 @@
-<?
+<?php
 
 function Remove_Group($group_id, $cfg, $bd)
 // Removes a entire group, all of its members, documents, notices and appointments

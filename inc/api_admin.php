@@ -1,4 +1,4 @@
-<?
+<?php
 
 function List_Units($unit_id, $unit_name,  $bd)
 // Returns the list of units

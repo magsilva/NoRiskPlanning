@@ -6,37 +6,36 @@
  * installed and running.
 */
 
+require("api_admin.php");
+require("api_appointments.php");
+require("api_groups.php");
+require("api_validation.php");
+
 function User_Authenticate_Password($account_id, $password, $bd)
 /* The password must be informed in its natural way
  * Checks whether the password and account_id were informed correctly
  * Returns 1 if OK, and 0 if the password is wrong, and -1 if user was not found
 */
 {
-	$query = "SELECT * FROM accounts WHERE account_id = '$account_id'";
-	$result = $bd->Query($query);
-	if ($result)
+	$query_account = "SELECT * FROM accounts WHERE account_id=" . $bd->GetTextFieldValue($account_id);
+	$result_account = $bd->Query($query_account);
+	if ($result_account != 0 && $bd->NumberOfRows($result_account) > 0)
 	{
-		if ($bd->NumberOfRows($result))
+		$query_password = "SELECT password FROM people WHERE account_id=" . $bd->GetTextFieldValue($account_id);
+		$result_password = $bd->Query($query_password);
+		if ($bd->NumberOfRows($result_password) == 1)
 		{
-			$query_password = "SELECT * FROM people WHERE account_id = '$account_id'";
-			$result1 = $bd->Query($query_password);
-			if ($bd->NumberOfRows($result1)){
-				$actual_password = $bd->FetchResult($result1, 0, 'password');
-				$crypt_password = md5($password);
-
-				if ($crypt_password == $actual_password)
-					return 1;
-				else
-					return 0;
-			}
-			else
-				return 0;
+			$actual_password = $bd->FetchResult($result_password, 0, 'password');
+			$crypt_password = md5($password);
+			if ($crypt_password === $actual_password)
+				return 1;
 		}
-		else
-			return -1;
+		return 0;
 	}
 	else
+	{
 		return -1;
+	}
 }
 
 function Person_Update_Profile($account_id, $dep_id, $name, $role, $email, $url, $category,
@@ -216,8 +215,4 @@ function Get_Role($account_id, $bd)
 		return ('');
 }
 
-require_once "api_validation.php";
-require_once "api_appointments.php";
-require_once "api_admin.php";
-require_once "api_groups.php";
 ?>

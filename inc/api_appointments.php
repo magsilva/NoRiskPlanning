@@ -1,4 +1,5 @@
-<?
+<?php
+
 // This module constains functions related to appointment handling
 
 function List_Appointments($user, $is_group, $group_id, $authorized, $beg_day, $end_day, $beg_time, $end_time, $app_id, $owner, $app_times, $app_types,

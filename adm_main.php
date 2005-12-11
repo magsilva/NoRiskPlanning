@@ -1,8 +1,8 @@
 <?php
-if ($already_initialized != 1)
+if (!isset($already_initialized) || $already_initialized != 1)
 {
 	require("./inc/script_inicialization.php");
-	include "./inc/nrp_api.php";
+	require("./inc/nrp_api.php");
 }
 
 if (!isset($num_errors))

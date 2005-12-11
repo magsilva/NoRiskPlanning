@@ -1,4 +1,5 @@
-<?
+<?php
+
 function User_Validate_Numeric_Field($content)
 /* Checks whether the field was filled in properly
  * If it returns 0, the field was empty

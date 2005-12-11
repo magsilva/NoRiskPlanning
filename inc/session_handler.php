@@ -8,13 +8,13 @@ function Create_Session($username, $exibition, $ip_address, $master_session, $bd
  * If the session is a master session, this value must be 0
  */
 {
-	$query = "SELECT * FROM sessions WHERE (account_id = '$username') AND (active = 1)";
+	$query = "SELECT * FROM sessions WHERE (account_id = " . $bd->GetTextFieldValue($username) . " AND (active = 1)";
 	$active = $bd->Query($query);
+
+	// Check if there is an unfinished session
 	if ($num_sessions = $bd->NumberOfRows($active) != 0)
-	// If there is a not-finished session
 	{
 		if ($master_session == 0)
-		// If the session is a mater session
 		{
 			for ($i = 0; $i < $num_sessions; $i++)
 			{

@@ -87,7 +87,7 @@ Group Documents</p>
 			<xsl:attribute name="href">
 				<xsl:value-of select="document.url"/>
 			</xsl:attribute>
-			<img alt="Download" src="images/download.gif" border="0"/> -
+			<img alt="Download" src="images/download.png" border="0"/> -
 			<xsl:value-of select="document.name"/>
 		</a>
 	</td>
