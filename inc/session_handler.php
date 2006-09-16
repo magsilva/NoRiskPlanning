@@ -12,7 +12,8 @@ function Create_Session($username, $exibition, $ip_address, $master_session, $bd
 	$active = $bd->Query($query);
 
 	// Check if there is an unfinished session
-	if ($num_sessions = $bd->NumberOfRows($active) != 0)
+	$num_sessions = $bd->NumberOfRows($active);
+	if ($num_sessions != 0 )
 	{
 		if ($master_session == 0)
 		{
