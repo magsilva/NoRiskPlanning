@@ -27,8 +27,9 @@ function User_Authenticate_Password($account_id, $password, $bd)
 		{
 			$actual_password = $bd->FetchResult($result_password, 0, 'password');
 			$crypt_password = md5($password);
-			if ($crypt_password === $actual_password)
+			if ($crypt_password === $actual_password) {
 				return 1;
+			}
 		}
 		return 0;
 	}
