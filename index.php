@@ -16,12 +16,13 @@ if (isset($_REQUEST['submit']) && $_REQUEST['submit'] == "Login")
 	if ($val_id && $val_password)
 	{
 		$auth_result = User_Authenticate_Password($_REQUEST['id'], $_REQUEST['password'], $bd);
-		if ($auth_result == 1)
+		if ($auth_result == 1) {
 			$user_ok = 1;
-		elseif ($auth_result == 0)
+		} elseif ($auth_result == 0) {
 			$error[$num_errors++] = "Wrong Password";
-		else
+		} else {
 			$error[$num_errors++] = "User Not Found";
+		}
 	}
 	else
 	{
@@ -38,15 +39,15 @@ if (isset($_REQUEST['submit']) && $_REQUEST['submit'] == "Login")
 	if ($user_ok)
 	{
 		$is_admin = 0;
-		if ($_REQUEST['id'] == 'admin')
+		if ($_REQUEST['id'] == 'admin') {
 			$is_admin = 1;
+		}
 		$ip_address = $_SERVER['REMOTE_ADDR'];
-		$sess_id = Create_Session($id, 'default', $ip_address, 0, $bd);
+		$sess_id = Create_Session($_REQUEST['id'], 'default', $ip_address, 0, $bd);
 		$crypt_sess_id = md5($sess_id);
 		$complete_sess_id = $crypt_sess_id . $sess_id;
 
-		if ($is_admin)
-		{
+		if ($is_admin) {
 			header("location: adm_main.php?sess_id=$complete_sess_id");
 			exit;
 		}
