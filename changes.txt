@@ -1,0 +1,39 @@
+
+Alterações nesta versão da NoRisk
+
+Foi inserido mais um campo na tabela session um campo 'type' ele servirá para
+identificar se a sessão é direta ou via um webservice para que um tipo não
+encerre as seções de outro tipo.
+
+No arquivo service.php foi inserido o quarto parametro da chamada de
+Create_Session com o valor 1 para identificar que é um webservice.
+
+
+ALTERAÇÕES NOS ARQUIVOS:
+
+-> inc/nrp.sql 
+
+(line 187) + type smallint(6) NOT NULL default '0',
+
+    
+-> inc/session_handler.php
+
+(line 5) Adicionado o parametro 'type' como quarto parametros da funcao
+            Create_Session.
+
+(line 11) Adicionado comando para buscar apenas sessoes do mesmo tipo
+
+(line 28) Adicionado o parametro type, como ultimo argumento da query insert
+
+
+-> index.php
+
+(line 43) adicionado o parametro 4 na chamada a função Create_Session com valor
+            zero pois se trata de um login direto.
+
+-> slave.php
+
+(line 43) adicionado o parametro 4 na chamada a função Create_Session com valor
+            zero pois se trata de um login direto.
+
+
